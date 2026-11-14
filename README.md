@@ -27,12 +27,27 @@ Attacker ──▶ SSH Honeypot ──▶ Redis Streams ──▶ Pipeline ─�
 ## Status
 
 - [x] Phase 0 — repository, problem statement, MDP formulation
-- [ ] Phase 1 — honeypot core (standalone, no infra)
+- [x] Phase 1 — honeypot core (standalone, no infra)
 - [ ] Phase 2 — pipeline + PostgreSQL
 - [ ] Phase 3 — dashboard
 - [ ] Phase 4 — Docker Compose, end-to-end
 - [ ] Phase 5 — attacker simulator + experiments
 - [ ] Phase 6 — report, slides
+
+## Run the honeypot standalone (no Docker)
+
+```bash
+python -m venv .venv && .venv/Scripts/activate      # Windows; use bin/activate on Linux
+pip install -r honeypot/requirements.txt
+python -m honeypot                                  # listens on :2222, events as JSON on stdout
+ssh -p 2222 root@localhost                          # any password; the N-th attempt succeeds
+```
+
+Environment variables (all optional): `HONEYPOT_PORT`, `HONEYPOT_HOSTNAME`, `REDIS_URL`,
+`RL_POLICY` (`qlearn|sarsa|bandit|random|static`), `RL_ALPHA`, `RL_GAMMA`, `RL_EPSILON0`,
+`LOGIN_ATTEMPTS_MIN/MAX`, `QTABLE_PATH`. See `honeypot/config.py`.
+
+Tests: `python -m pytest`.
 
 ## Quick start (after Phase 4)
 
