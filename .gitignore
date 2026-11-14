@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime state (never commit learned state or keys)
+data/
+*.log
+honeypot/ssh_host_key*
+honeypot/rl/qtable*.json
+
+# GeoIP database (downloaded separately, licensed)
+*.mmdb
+
+# Experiments output
+simulator/results/
+*.png
+!docs/figures/*.png
+
+# Env / secrets
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
