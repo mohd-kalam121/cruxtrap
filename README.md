@@ -1,6 +1,7 @@
 # CruxTrap — An Adaptive SSH Honeypot with a Reinforcement-Learning Response Policy
 
 Final-year B.Tech project (Mathematics & Computing), Delhi Technological University.
+Team: Mohd Kalam (23/MC/090), Mayank Jha (23/MC/087), Krish (23/MC/076).
 
 CruxTrap is a medium-interaction SSH honeypot that emulates an Ubuntu server inside an
 in-memory fake filesystem, records attacker credentials and commands, and uses a

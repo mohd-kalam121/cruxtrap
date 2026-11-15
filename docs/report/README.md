@@ -6,8 +6,9 @@ Source of the B.Tech project report. `main.tex` includes `chapters/*.tex`; figur
 ## Before submitting
 
 Everything shown in **red [brackets]** in the PDF must be filled in. The values are set in
-the block at the top of `main.tex` (`\rollno`, `\supervisor`, `\supervisordesig`,
-`\coursename`, `\submissionmonth`) and in the dates on the declaration and certificate pages
+the block at the top of `main.tex` (`\supervisor`, `\supervisordesig`, `\coursename`,
+`\submissionmonth`; the group members and roll numbers are `\studentA`..`\studentC` and
+`\rollA`..`\rollC`) and in the dates on the declaration and certificate pages
 (`chapters/00-frontmatter.tex`). Check the title page, declaration and certificate wording
 against your department's template, add the DTU logo if required, and verify the reference
 details in `refs.bib`.
