@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_macros.html" import session_rows, pager %}
+{% block title %}Sessions{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Sessions <small>{{ total | num }} total</small></h2>
+  <form class="filters" method="get">
+    <input name="q" value="{{ q }}" placeholder="IP prefix or username" autocomplete="off">
+    <label>min commands <input name="min_commands" type="number" min="0" value="{{ min_commands }}"></label>
+    <button>Filter</button>
+    {% if q or min_commands %}<a href="/sessions">clear</a>{% endif %}
+  </form>
+  {{ session_rows(rows) }}
+  {{ pager(page, pages, '/sessions?q=' ~ (q | urlencode) ~ '&min_commands=' ~ min_commands ~ '&') }}
+</section>
+{% endblock %}

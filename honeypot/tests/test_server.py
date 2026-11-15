@@ -127,5 +127,6 @@ async def test_login_threshold(honeypot):
     async with await connect(port, password="second-try") as conn:
         assert (await conn.run("whoami")).stdout.strip() == "root"
     attempts = emitter.of_type("login_attempt")
-    assert [a["success"] for a in attempts] == [False, True]
+    seen = [(a["password"], a["attempt"], a["success"]) for a in attempts]
+    assert [a["success"] for a in attempts] == [False, True], f"login events: {seen}"
     assert attempts[1]["password"] == "second-try"

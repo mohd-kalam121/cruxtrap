@@ -1,0 +1,50 @@
+{% macro bars(rows, color='#58a6ff', mono=false, colors=none) -%}
+  {% set mx = (rows | map(attribute='n') | max) if rows else 1 %}
+  {% if not rows %}<p class="muted">No data yet.</p>{% endif %}
+  <ul class="bars">
+  {% for r in rows %}
+    <li>
+      <span class="lbl {{ 'mono' if mono }}" title="{{ r.label }}">{{ r.label }}</span>
+      <span class="track"><span class="fill" style="--w: {{ (100 * r.n / mx) | round(1) }}%; --c: {{ colors[r.label] if colors and r.label in colors else color }}"></span></span>
+      <span class="n">{{ r.n | num }}</span>
+    </li>
+  {% endfor %}
+  </ul>
+{%- endmacro %}
+
+{% macro action(a) -%}
+  {% if a %}<span class="badge" style="--c: {{ ACTION_COLORS.get(a, '#8b949e') }}">{{ a }}</span>{% else %}—{% endif %}
+{%- endmacro %}
+
+{% macro pager(page, pages, base) -%}
+  {% if pages > 1 %}
+  <div class="pager">
+    {% if page > 1 %}<a href="{{ base }}page={{ page - 1 }}">← prev</a>{% endif %}
+    <span>page {{ page }} / {{ pages }}</span>
+    {% if page < pages %}<a href="{{ base }}page={{ page + 1 }}">next →</a>{% endif %}
+  </div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro session_rows(rows, show_ip=true) -%}
+  <table class="tbl">
+    <thead><tr><th>Started (UTC)</th>{% if show_ip %}<th>Source</th>{% endif %}<th>Username</th><th>Password</th>
+      <th class="r">Cmds</th><th class="r">Duration</th><th>End</th><th class="r">Return</th></tr></thead>
+    <tbody>
+    {% for s in rows %}
+      <tr class="click" data-href="/sessions/{{ s.session_id }}">
+        <td><a href="/sessions/{{ s.session_id }}">{{ s.started_at | ts }}</a></td>
+        {% if show_ip %}<td><span class="flag">{{ s.country_code | flag }}</span> <a class="mono" href="/attackers/{{ s.ip }}">{{ s.ip }}</a></td>{% endif %}
+        <td class="mono">{{ s.username or '—' }}</td>
+        <td class="mono secret">{{ s.password or '—' }}</td>
+        <td class="r">{{ s.command_count }}</td>
+        <td class="r">{{ s.duration_s | duration }}</td>
+        <td><span class="reason reason-{{ s.end_reason or 'open' }}">{{ s.end_reason or 'active' }}</span></td>
+        <td class="r">{{ s.total_reward | num }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted">No sessions yet. Connect with <code>ssh -p 2222 root@localhost</code>.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{%- endmacro %}

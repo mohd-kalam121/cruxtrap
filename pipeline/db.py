@@ -40,12 +40,19 @@ class Database:
             await self.pool.close()
 
     # ----------------------------------------------------------- attackers
-    async def ensure_attacker(self, conn, event: dict, geo: dict, **increments) -> None:
-        sets = ", ".join(f"{k} = attackers.{k} + {int(v)}" for k, v in increments.items() if v) or "last_seen = EXCLUDED.last_seen"
+    COUNTERS = ("total_connections", "total_login_attempts", "total_sessions", "total_commands")
+
+    async def ensure_attacker(self, conn, event: dict, geo: dict, **increments: int) -> None:
+        """Upsert the attacker row and add `increments` to its counters (all optional)."""
+        unknown = set(increments) - set(self.COUNTERS)
+        if unknown:
+            raise ValueError(f"unknown counters {unknown}")
+        inc = {k: int(increments.get(k, 0)) for k in self.COUNTERS}
+        sets = ", ".join(f"{k} = attackers.{k} + {v}" for k, v in inc.items() if v)
         await conn.execute(
             f"""INSERT INTO attackers (src_ip, first_seen, last_seen, country_code, country, city, latitude, longitude,
-                                       last_username, {", ".join(increments)})
-                VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, {", ".join(str(int(v)) for v in increments.values())})
+                                       last_username, {", ".join(inc)})
+                VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, {", ".join(str(v) for v in inc.values())})
                 ON CONFLICT (src_ip) DO UPDATE SET
                     last_seen = GREATEST(attackers.last_seen, EXCLUDED.last_seen),
                     last_username = COALESCE(EXCLUDED.last_username, attackers.last_username),
@@ -53,8 +60,7 @@ class Database:
                     country = COALESCE(attackers.country, EXCLUDED.country),
                     city = COALESCE(attackers.city, EXCLUDED.city),
                     latitude = COALESCE(attackers.latitude, EXCLUDED.latitude),
-                    longitude = COALESCE(attackers.longitude, EXCLUDED.longitude),
-                    {sets}""",
+                    longitude = COALESCE(attackers.longitude, EXCLUDED.longitude){", " + sets if sets else ""}""",
             ip_of(event), ts_of(event), geo.get("country_code"), geo.get("country"), geo.get("city"),
             geo.get("latitude"), geo.get("longitude"), event.get("username"))
 

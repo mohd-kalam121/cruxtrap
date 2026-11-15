@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import bars, session_rows %}
+{% block title %}{{ a.ip }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/attackers">Attackers</a> / <span class="mono">{{ a.ip }}</span></p>
+
+<section class="tiles">
+  <div class="tile"><span class="k">Location</span><span class="v sm"><span class="flag">{{ a.country_code | flag }}</span> {{ a.country or 'unknown' }}</span><span class="s">{{ a.city or '' }}</span></div>
+  <div class="tile"><span class="k">Connections</span><span class="v">{{ a.total_connections | num }}</span><span class="s">{{ a.total_login_attempts | num }} login attempts</span></div>
+  <div class="tile"><span class="k">Sessions</span><span class="v">{{ a.total_sessions | num }}</span><span class="s">{{ a.total_commands | num }} commands</span></div>
+  <div class="tile"><span class="k">Active</span><span class="v sm">{{ a.last_seen | ago }}</span><span class="s">first seen {{ a.first_seen | ts }}</span></div>
+</section>
+
+<div class="grid3">
+  <section class="card span2">
+    <h2>Login attempts <small>latest {{ a.logins | length }}</small></h2>
+    <table class="tbl">
+      <thead><tr><th>Time (UTC)</th><th>Username</th><th>Password</th><th class="r">Attempt</th><th>Result</th></tr></thead>
+      <tbody>
+      {% for l in a.logins %}
+        <tr><td>{{ l.ts | ts }}</td><td class="mono">{{ l.username }}</td><td class="mono secret">{{ l.password }}</td>
+          <td class="r">{{ l.attempt }}</td><td>{{ '✔ accepted' if l.success else '✕ rejected' }}</td></tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No login attempts recorded.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="card"><h2>What they did</h2>{{ bars(a.categories) }}</section>
+</div>
+
+<section class="card">
+  <h2>Sessions</h2>
+  {{ session_rows(a.sessions, show_ip=false) }}
+</section>
+{% endblock %}

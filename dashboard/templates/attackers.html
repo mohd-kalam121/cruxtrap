@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pager %}
+{% block title %}Attackers{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Attackers <small>{{ total | num }} source IPs</small></h2>
+  <form class="filters" method="get">
+    <input name="q" value="{{ q }}" placeholder="IP prefix or country" autocomplete="off">
+    <button>Filter</button>
+    {% if q %}<a href="/attackers">clear</a>{% endif %}
+  </form>
+  <table class="tbl">
+    <thead><tr><th>Source IP</th><th>Location</th><th>Last user</th><th class="r">Conns</th><th class="r">Logins</th>
+      <th class="r">Sessions</th><th class="r">Cmds</th><th>First seen</th><th>Last seen</th></tr></thead>
+    <tbody>
+    {% for a in rows %}
+      <tr class="click" data-href="/attackers/{{ a.ip }}">
+        <td><a class="mono" href="/attackers/{{ a.ip }}">{{ a.ip }}</a></td>
+        <td><span class="flag">{{ a.country_code | flag }}</span> {{ a.city ~ ', ' if a.city }}{{ a.country or 'unknown' }}</td>
+        <td class="mono">{{ a.last_username or '—' }}</td>
+        <td class="r">{{ a.total_connections }}</td>
+        <td class="r">{{ a.total_login_attempts }}</td>
+        <td class="r">{{ a.total_sessions }}</td>
+        <td class="r">{{ a.total_commands }}</td>
+        <td>{{ a.first_seen | ts }}</td>
+        <td title="{{ a.last_seen | ts }}">{{ a.last_seen | ago }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="muted">No attackers yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, pages, '/attackers?q=' ~ (q | urlencode) ~ '&') }}
+</section>
+{% endblock %}

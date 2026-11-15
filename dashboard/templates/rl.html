@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}RL Agent{% endblock %}
+{% block content %}
+<section class="tiles">
+  <div class="tile"><span class="k">Exploration <span class="nocase">ε</span></span><span class="v">{{ stats.epsilon | num(3) }}</span><span class="s">decays per episode</span></div>
+  <div class="tile"><span class="k">Episodes</span><span class="v">{{ stats.episodes | num }}</span><span class="s">sessions learned from</span></div>
+  <div class="tile"><span class="k">States visited</span><span class="v">{{ table | length }}</span><span class="s">of {{ CATEGORIES | length * PHASES | length }} possible</span></div>
+  <div class="tile"><span class="k">Mean engagement</span><span class="v">{{ stats.avg_commands | num }}</span><span class="s">commands / session</span></div>
+</section>
+
+<div class="grid3">
+  <section class="card"><h2>Engagement</h2>{{ charts.engagement }}</section>
+  <section class="card"><h2>Return</h2>{{ charts.reward }}</section>
+  <section class="card"><h2>Exploration ε</h2>{{ charts.epsilon }}</section>
+</div>
+<form class="filters inline" method="get"><label>block size <input name="bucket" type="number" min="1" max="1000" value="{{ bucket }}"></label><button>Apply</button></form>
+
+<section class="card">
+  <h2>Action mix over time <small>share of actions per block of {{ bucket }} sessions</small></h2>
+  {% if mix %}
+  <div class="stack">
+    {% for m in mix %}
+      <div class="stackcol" title="block {{ m.b + 1 }}: {% for a in ACTIONS %}{{ a }} {{ m[a] }}{{ ', ' if not loop.last }}{% endfor %}">
+        {% for a in ACTIONS %}{% if m[a] %}<span style="--h: {{ (100 * m[a] / m.total) | round(2) }}%; --c: {{ ACTION_COLORS[a] }}"></span>{% endif %}{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">No data yet.</p>{% endif %}
+  <p class="legend">{% for a in ACTIONS %}<span class="badge" style="--c: {{ ACTION_COLORS[a] }}">{{ a }}</span> {% endfor %}</p>
+</section>
+
+<section class="card">
+  <h2>Q-table <small>Q(s, a) — latest learned values; ★ = greedy action; small number = times tried; grey = never tried (initial value)</small></h2>
+  <div class="scroll">
+  <table class="tbl qtable">
+    <thead><tr><th>State (category | phase)</th>{% for a in ACTIONS %}<th class="c">{{ a }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for c in CATEGORIES %}{% for ph in PHASES %}
+      {% set st = c ~ '|' ~ ph %}{% set row = table.get(st) %}
+      <tr class="{{ 'unvisited' if not row }} {{ 'first' if loop.first }}">
+        <td>{% if loop.first %}<span class="cat cat-{{ c }}">{{ c }}</span>{% endif %} <span class="muted">{{ ph }}</span></td>
+        {% if row and row.q %}{% set best = row.q | dictsort(by='value') | last %}{% endif %}
+        {% for a in ACTIONS %}
+          {% set v = row.q.get(a) if row else none %}
+          {% set tried = row and row.visits.get(a) %}
+          <td class="c {{ '' if tried else 'muted' }}" style="{{ v | heat(lo, hi, tried) }}">
+            {% if v is not none %}{{ '★ ' if best and best[0] == a }}{{ v | num }}{% else %}<span class="muted">·</span>{% endif %}
+            {% if row and row.visits.get(a) %}<sub>{{ row.visits[a] }}</sub>{% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

@@ -29,7 +29,7 @@ Attacker ──▶ SSH Honeypot ──▶ Redis Streams ──▶ Pipeline ─�
 - [x] Phase 0 — repository, problem statement, MDP formulation
 - [x] Phase 1 — honeypot core (standalone, no infra)
 - [x] Phase 2 — pipeline + PostgreSQL
-- [ ] Phase 3 — dashboard
+- [x] Phase 3 — dashboard
 - [ ] Phase 4 — Docker Compose, end-to-end
 - [ ] Phase 5 — attacker simulator + experiments
 - [ ] Phase 6 — report, slides
@@ -55,6 +55,21 @@ pip install -r pipeline/requirements.txt
 python -m pipeline                                   # terminal 1: Redis Streams -> PostgreSQL
 REDIS_URL=redis://127.0.0.1:6379/0 python -m honeypot   # terminal 2 (PowerShell: $env:REDIS_URL="...")
 ```
+
+Dashboard (terminal 3):
+
+```bash
+pip install -r dashboard/requirements.txt
+uvicorn dashboard.app:app --host 127.0.0.1 --port 8000     # http://127.0.0.1:8000
+```
+
+Pages: overview, sessions (with command-by-command replay), attackers, and an RL page
+with learning curves, action mix over time and the live Q-table. The dashboard has no
+login, so keep it on 127.0.0.1.
+
+Demo data: `python scripts/demo_traffic.py --sessions 60` runs scripted attacker
+profiles (botnet dropper, miner, recon operator, credential harvester, scanner) against
+the local honeypot. Set `HONEYPOT_TIME_SCALE=0.15` on the honeypot to shorten DELAY/TARPIT.
 
 Postgres is published on host port **55432** because 5432/5433 are commonly taken by a
 native install or other projects; override with `POSTGRES_PORT` and `DATABASE_URL`.

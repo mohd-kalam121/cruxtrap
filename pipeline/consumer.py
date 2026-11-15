@@ -131,7 +131,8 @@ class Pipeline:
                 attempt += 1
                 log.warning("database write failed (%s); retry %d", e, attempt)
                 await asyncio.sleep(min(30.0, self.s.db_retry_seconds * attempt))
-            except (asyncpg.DataError, asyncpg.IntegrityConstraintViolationError, KeyError) as e:
+            except (asyncpg.PostgresError, KeyError, ValueError, TypeError) as e:
+                # Not transient: bad data or a bug. Park it rather than crash ingestion.
                 await self.dead_letter(msg_id, fields, f"{type(e).__name__}: {e}")
                 return
         if not known:

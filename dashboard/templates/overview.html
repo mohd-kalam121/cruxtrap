@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import bars, session_rows %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<section class="tiles" id="tiles">
+  <div class="tile"><span class="k">Attackers</span><span class="v" data-stat="attackers">{{ stats.attackers | num }}</span><span class="s">unique source IPs</span></div>
+  <div class="tile"><span class="k">Sessions</span><span class="v" data-stat="sessions">{{ stats.sessions | num }}</span><span class="s"><span data-stat="sessions_24h">{{ stats.sessions_24h | num }}</span> in last 24h</span></div>
+  <div class="tile"><span class="k">Commands captured</span><span class="v" data-stat="commands">{{ stats.commands | num }}</span><span class="s"><span data-stat="avg_commands">{{ stats.avg_commands | num }}</span> per session</span></div>
+  <div class="tile"><span class="k">Login attempts</span><span class="v" data-stat="login_attempts">{{ stats.login_attempts | num }}</span><span class="s">credentials collected</span></div>
+  <div class="tile"><span class="k">Decoy reads</span><span class="v" data-stat="decoy_reads">{{ stats.decoy_reads | num }}</span><span class="s">credential access after FAKE</span></div>
+  <div class="tile"><span class="k">Agent <span class="nocase">ε</span></span><span class="v" data-stat="epsilon">{{ stats.epsilon | num(3) }}</span><span class="s"><span data-stat="episodes">{{ stats.episodes | num }}</span> episodes learned</span></div>
+</section>
+
+<section class="card">
+  <h2>Sessions per hour <small>last 24 h, UTC</small></h2>
+  {% set mx = (hourly | map(attribute='n') | max) or 1 %}
+  <div class="hist">
+    {% for h in hourly %}
+      <div class="col" title="{{ h.hour.strftime('%H:00') }} — {{ h.n }} sessions"><span style="--h: {{ (100 * h.n / mx) | round(1) }}%"></span><i>{{ h.hour.strftime('%H') if loop.index0 % 3 == 0 else '' }}</i></div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid3">
+  <section class="card"><h2>Top usernames</h2>{{ bars(users, mono=true) }}</section>
+  <section class="card"><h2>Top passwords</h2>{{ bars(pwds, '#d29922', mono=true) }}</section>
+  <section class="card"><h2>Countries</h2>{{ bars(countries, '#a371f7') }}</section>
+</div>
+
+<div class="grid3">
+  <section class="card span2"><h2>Top commands</h2>{{ bars(cmds, '#3fb950', mono=true) }}</section>
+  <section class="card">
+    <h2>Command categories</h2>{{ bars(cats, '#58a6ff') }}
+    <h2 class="mt">Agent actions</h2>{{ bars(acts, colors=ACTION_COLORS) }}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Recent sessions <a class="more" href="/sessions">all sessions →</a></h2>
+  {{ session_rows(recent) }}
+</section>
+{% endblock %}

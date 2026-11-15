@@ -104,6 +104,17 @@ async def test_full_session_lands_in_tables(pipeline):
     assert pending["pending"] == 0
 
 
+async def test_unauthenticated_disconnect(pipeline):
+    """A scanner that connects and never logs in emits only connection + disconnect."""
+    base = {"ts": "2026-11-15T10:00:00+00:00", "src_ip": "192.0.2.50", "src_port": 4}
+    await push(pipeline, {"type": "connection", **base})
+    await push(pipeline, {"type": "disconnect", **base, "authenticated": False, "error": None})
+    await pipeline.drain()
+    assert pipeline.failed == 0 and pipeline.processed == 2
+    async with pipeline.db.pool.acquire() as c:
+        assert await c.fetchval("SELECT total_connections FROM attackers WHERE src_ip = '192.0.2.50'") == 1
+
+
 async def test_redelivery_is_idempotent(pipeline):
     sid = str(uuid.uuid4())
     cmd = ev("command", sid, seq=1, command="id", category="recon", phase="early", state="recon|early",

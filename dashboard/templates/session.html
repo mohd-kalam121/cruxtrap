@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import action %}
+{% block title %}Session {{ s.session_id | string | truncate(8, true, '') }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/sessions">Sessions</a> / <span class="mono">{{ s.session_id }}</span></p>
+
+<section class="card meta">
+  <div><span class="k">Source</span><span><span class="flag">{{ s.country_code | flag }}</span> <a class="mono" href="/attackers/{{ s.ip }}">{{ s.ip }}</a>:{{ s.src_port }} {% if s.country %}<small class="muted">{{ s.city ~ ', ' if s.city }}{{ s.country }}</small>{% endif %}</span></div>
+  <div><span class="k">Credentials</span><span class="mono">{{ s.username or '—' }} / <span class="secret">{{ s.password or '—' }}</span></span></div>
+  <div><span class="k">Started</span><span>{{ s.started_at | ts }} UTC</span></div>
+  <div><span class="k">Duration</span><span>{{ s.duration_s | duration }}</span></div>
+  <div><span class="k">Ended</span><span class="reason reason-{{ s.end_reason or 'open' }}">{{ s.end_reason or 'active' }}</span></div>
+  <div><span class="k">Mode</span><span>{{ 'interactive (' ~ s.term ~ ')' if s.pty else ('exec: ' ~ (s.exec_command or '—')) }}</span></div>
+  <div><span class="k">Return</span><span>{{ s.total_reward | num }}</span></div>
+  <div><span class="k"><span class="nocase">ε</span> at end · episode</span><span>{{ s.epsilon | num(3) }} · {{ s.episode or '—' }}</span></div>
+</section>
+
+<section class="card">
+  <h2>Replay <small>commands as typed; output is not stored</small>
+    <span class="controls"><button id="play" type="button">▶ Play</button>
+      <label>speed <select id="speed"><option value="1">1×</option><option value="4" selected>4×</option><option value="16">16×</option></select></label></span>
+  </h2>
+  <pre class="term" id="term" aria-live="polite"></pre>
+  <script type="application/json" id="replay-data">{{ replay | tojson }}</script>
+  <script type="application/json" id="replay-meta">{{ {"user": s.username or "root"} | tojson }}</script>
+</section>
+
+<section class="card">
+  <h2>Timeline <small>{{ s.actions | length }} commands</small></h2>
+  <table class="tbl">
+    <thead><tr><th class="r">#</th><th class="r">t+</th><th>Command</th><th>Category</th><th>Phase</th><th>Action</th>
+      <th class="r">Reward</th><th>Next</th><th>Greedy before</th></tr></thead>
+    <tbody>
+    {% for a in s.actions %}
+      {% set greedy = (a.q_before | dictsort(by='value') | last) if a.q_before else none %}
+      <tr>
+        <td class="r">{{ a.seq }}</td>
+        <td class="r muted">{{ ((a.ts - s.started_at).total_seconds()) | round(1) }}s</td>
+        <td class="mono cmd">{{ a.command }}</td>
+        <td><span class="cat cat-{{ a.category }}">{{ a.category }}</span></td>
+        <td>{{ a.phase }}</td>
+        <td>{{ action(a.action) }}{% if a.decoys_planted and a.action == 'FAKE' %} <span class="muted" title="Decoy files planted">🍯</span>{% endif %}</td>
+        <td class="r">{{ a.reward | num }}</td>
+        <td>{{ '→ continued' if a.continued else ('✕ ended' if a.continued is not none else '…') }}</td>
+        <td class="mono muted">{% if greedy %}{{ greedy[0] }} ({{ greedy[1] | num }}){% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="muted">No commands in this session.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
