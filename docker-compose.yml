@@ -1,0 +1,39 @@
+# CruxTrap — data services (Phase 2). Application services are added in Phase 4.
+#   docker compose up -d
+# Ports are bound to localhost only; nothing here is reachable from other machines.
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cruxtrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cruxtrap}
+      POSTGRES_DB: ${POSTGRES_DB:-cruxtrap}
+    ports:
+      # Uncommon host port: 5432/5433 are often taken by a native PostgreSQL or other projects
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cruxtrap} -d ${POSTGRES_DB:-cruxtrap}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redis-data:
+  pg-data:

@@ -28,7 +28,7 @@ Attacker ──▶ SSH Honeypot ──▶ Redis Streams ──▶ Pipeline ─�
 
 - [x] Phase 0 — repository, problem statement, MDP formulation
 - [x] Phase 1 — honeypot core (standalone, no infra)
-- [ ] Phase 2 — pipeline + PostgreSQL
+- [x] Phase 2 — pipeline + PostgreSQL
 - [ ] Phase 3 — dashboard
 - [ ] Phase 4 — Docker Compose, end-to-end
 - [ ] Phase 5 — attacker simulator + experiments
@@ -47,7 +47,23 @@ Environment variables (all optional): `HONEYPOT_PORT`, `HONEYPOT_HOSTNAME`, `RED
 `RL_POLICY` (`qlearn|sarsa|bandit|random|static`), `RL_ALPHA`, `RL_GAMMA`, `RL_EPSILON0`,
 `LOGIN_ATTEMPTS_MIN/MAX`, `QTABLE_PATH`. See `honeypot/config.py`.
 
-Tests: `python -m pytest`.
+## Run with the data pipeline (Redis + PostgreSQL in Docker)
+
+```bash
+docker compose up -d                                 # redis :6379, postgres :55432 (localhost only)
+pip install -r pipeline/requirements.txt
+python -m pipeline                                   # terminal 1: Redis Streams -> PostgreSQL
+REDIS_URL=redis://127.0.0.1:6379/0 python -m honeypot   # terminal 2 (PowerShell: $env:REDIS_URL="...")
+```
+
+Postgres is published on host port **55432** because 5432/5433 are commonly taken by a
+native install or other projects; override with `POSTGRES_PORT` and `DATABASE_URL`.
+
+GeoIP: drop a MaxMind `GeoLite2-City.mmdb` into `data/` for country/city of public IPs.
+Without it, loopback/private ranges are still labelled and public IPs show as unknown.
+
+Tests: `python -m pytest` (pipeline tests use a separate `cruxtrap_test` database and
+skip if Docker services are down).
 
 ## Quick start (after Phase 4)
 
