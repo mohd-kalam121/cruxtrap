@@ -1,0 +1,207 @@
+\chapter{Requirements and System Design}
+\label{ch:design}
+
+\section{Requirements}
+
+\subsection{Functional Requirements}
+
+\begin{longtable}{@{}p{1.2cm}p{12.6cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+FR1 & Accept SSH connections with password authentication. Accept the $N$-th attempt from each source IP, with $N$ drawn uniformly from a configurable range, and record every attempted credential. \\
+FR2 & Provide an interactive shell (PTY) and non-interactive \code{exec} sessions that resemble Ubuntu 22.04: banner, prompt, filesystem, users, processes, network state. \\
+FR3 & Emulate common commands, including pipes, \code{;}, \code{\&\&}, \code{||}, redirection, environment variables and execution of downloaded scripts, without executing anything on the host. \\
+FR4 & Give each session an isolated filesystem; changes in one session are never visible in another. \\
+FR5 & Classify each command into one of ten intent categories and derive the session phase. \\
+FR6 & Choose one of five responses per command (\act{allow}, \act{delay}, \act{fake}, \act{tarpit}, \act{block}) with a pluggable policy, and update the policy online from a reward. \\
+FR7 & Persist the learned policy so that learning survives restarts. \\
+FR8 & Emit structured events (connection, login attempt, session start, command, RL update, session end, disconnect) to an event stream. \\
+FR9 & Consume events, enrich source IPs with geolocation, and store attackers, login attempts, sessions and per-command actions in a relational database. \\
+FR10 & Provide a dashboard with overview statistics, attacker profiles, session lists, command-by-command replay and a view of the learned policy. \\
+FR11 & Provide a simulator and an evaluator to compare policies quantitatively. \\
+\bottomrule
+\caption{Functional requirements}
+\label{tab:fr}
+\end{longtable}
+
+\subsection{Non-Functional Requirements}
+
+\begin{longtable}{@{}p{1.5cm}p{3cm}p{9.3cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Quality} & \textbf{Requirement} \\
+\midrule
+\endhead
+NFR1 & Safety & Attacker input is never executed. The exposed process runs unprivileged, in a read-only container, and cannot reach the database. \\
+NFR2 & Availability & Capturing attacks must not depend on any downstream component: if Redis, the pipeline or PostgreSQL fails, attackers are still served and events are not lost. \\
+NFR3 & Latency & Event emission must never delay a response to the attacker. \\
+NFR4 & Correctness & Delivery is at least once; reprocessing an event is idempotent; malformed events are set aside, not dropped silently. \\
+NFR5 & Security of the analyst UI & All attacker-controlled text is escaped; no inline scripts; the UI binds to localhost by default. \\
+NFR6 & Reproducibility & One command starts the whole system; one command reproduces every experimental number and figure. \\
+NFR7 & Maintainability & Each service has one responsibility; the RL policy, reward and state encoding are shared by the live system and the simulator. \\
+\bottomrule
+\caption{Non-functional requirements}
+\label{tab:nfr}
+\end{longtable}
+
+\section{System Architecture}
+
+CruxTrap consists of five services (Figure~\ref{fig:arch}). The \textbf{honeypot} is the only
+component that attackers can reach. It runs the SSH server, the emulated shell and the RL
+agent, and it publishes every event to \textbf{Redis Streams}. The \textbf{pipeline} consumes
+the stream, enriches events with geolocation and writes them to \textbf{PostgreSQL}, the system
+of record. The \textbf{dashboard} reads PostgreSQL and renders the analyst interface.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.9cm and 1.0cm]
+  \node[box, fill=red!6] (att) {Attacker\\\footnotesize(Internet)};
+  \node[box, right=1.4cm of att, minimum width=3.2cm, fill=blue!5] (hp) {\textbf{Honeypot}\\\footnotesize AsyncSSH, shell emulator,\\\footnotesize fake FS, RL agent};
+  \node[store, right=1.2cm of hp] (redis) {\textbf{Redis}\\\footnotesize Streams};
+  \node[box, below=1.3cm of redis, minimum width=3.0cm] (pipe) {\textbf{Pipeline}\\\footnotesize consumer group,\\\footnotesize GeoIP, upserts};
+  \node[store, left=1.3cm of pipe] (pg) {\textbf{PostgreSQL}};
+  \node[box, left=1.2cm of pg, minimum width=2.8cm] (dash) {\textbf{Dashboard}\\\footnotesize FastAPI + Jinja2};
+  \node[box, below=1.0cm of dash, fill=green!5] (analyst) {Analyst\\\footnotesize(browser)};
+  \draw[arr] (att) -- node[lbl, above] {SSH :22} (hp);
+  \draw[arr] (hp) -- node[lbl, above] {XADD} (redis);
+  \draw[arr] (redis) -- node[lbl, left] {XREADGROUP\\XACK} (pipe);
+  \draw[arr] (pipe) -- node[lbl, above] {SQL} (pg);
+  \draw[arr] (pg) -- node[lbl, above] {SQL} (dash);
+  \draw[arr] (analyst) -- node[lbl, right] {HTTP :8000} (dash);
+  \begin{scope}[on background layer]
+    \node[draw=blue!40, dashed, rounded corners, fit=(hp)(redis), inner sep=8pt, label={[font=\footnotesize, text=blue!60]above:network \code{ingest}}] {};
+    \node[draw=orange!60, dashed, rounded corners, fit=(pipe)(pg)(dash), inner sep=8pt, label={[font=\footnotesize, text=orange!80!black]below:network \code{storage}}] {};
+  \end{scope}
+\end{tikzpicture}
+\caption{CruxTrap architecture. The honeypot shares the \code{ingest} network with Redis
+only, so it cannot reach PostgreSQL even if the emulator is compromised. The pipeline is the
+only service attached to both networks.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Design Decisions}
+
+\begin{description}
+  \item[Why an event stream between the honeypot and the database?] It decouples capture
+    from storage. The honeypot never waits for a database write, and a database outage cannot
+    affect attackers (NFR2, NFR3). We chose Redis Streams over Redis Pub/Sub because streams
+    are durable: a message stays in the stream and in the consumer's pending-entries list until
+    it is acknowledged, so a crashed consumer loses nothing.
+  \item[Why is the RL agent inside the honeypot?] The action must be chosen \emph{before} the
+    response is sent, so the decision has to be on the critical path. Enrichment does not, so
+    it lives in the pipeline.
+  \item[Why PostgreSQL?] The data is relational (an attacker has many sessions, and a session
+    has many actions), and investigative queries need joins, aggregation and indexes.
+  \item[Why emulation rather than a real VM?] Safety (NFR1) and per-session isolation at the
+    cost of one Python object per session. The price is realism; Section~\ref{sec:fs} describes
+    how realism is recovered.
+  \item[Why asynchronous I/O?] Every component is I/O-bound. AsyncIO serves many concurrent
+    SSH sessions on one thread without a thread per connection.
+\end{description}
+
+\section{Session Lifecycle}
+
+Figure~\ref{fig:seq} shows the messages exchanged during one interactive session. The key
+detail is when learning happens. The reward for the response to command $t$ depends on whether
+the attacker sends command $t+1$ and on what kind of command it is. The TD update for
+$(s_t, a_t)$ is therefore \emph{deferred} until command $t+1$ arrives, or until the session ends.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\footnotesize, >=Stealth,
+    m/.style={above, align=center, font=\scriptsize, text width=2.6cm, inner sep=1.5pt}]
+  \foreach \x/\n/\t in {0/A/Attacker, 3.1/H/Honeypot, 6.2/R/RL agent, 9.3/S/Redis, 12.4/P/Pipeline + DB} {
+    \node[draw, rounded corners=2pt, fill=gray!8, minimum width=2.0cm, minimum height=0.6cm] (\n) at (\x,0) {\t};
+    \draw[gray, dashed] (\x,-0.3) -- (\x,-11.4);
+  }
+  % #1 from-x, #2 to-x, #3 y, #4 label
+  \newcommand{\msg}[4]{\draw[->, thick] (#1,#3) -- node[m] {#4} (#2,#3);}
+  \msg{0}{3.1}{-1.0}{password (try $n$)}
+  \msg{3.1}{9.3}{-1.5}{\code{login\_attempt}}
+  \msg{3.1}{0}{-2.2}{accepted on try $N$:\\ banner, prompt}
+  \msg{3.1}{9.3}{-2.7}{\code{session\_start}}
+  \msg{0}{3.1}{-3.5}{command $c_t$}
+  \msg{3.1}{6.2}{-4.1}{$s_t = (\kappa(c_t), \phi(t))$}
+  \msg{6.2}{3.1}{-4.9}{update $Q$; choose $a_t$}
+  \msg{3.1}{0}{-5.7}{output under $a_t$}
+  \msg{3.1}{9.3}{-6.2}{\code{command}, \code{rl\_update}}
+  \msg{9.3}{12.4}{-6.9}{consume, GeoIP,\\ upsert, XACK}
+  \node[font=\scriptsize, text=gray] at (1.55,-7.5) {\dots\ per command \dots};
+  \msg{0}{3.1}{-8.2}{\code{exit} / disconnect}
+  \msg{3.1}{6.2}{-8.7}{terminal reward}
+  \msg{6.2}{3.1}{-9.7}{final update;\\ checkpoint $Q$}
+  \msg{3.1}{9.3}{-10.2}{\code{session\_end}}
+  \msg{9.3}{12.4}{-10.9}{session finalised}
+\end{tikzpicture}
+\caption{Sequence of one attacker session.}
+\label{fig:seq}
+\end{figure}
+
+\section{Data Model}
+
+Figure~\ref{fig:er} shows the schema. \code{attackers} is keyed by source IP and holds
+aggregate counters and geolocation. \code{sessions} holds one row per authenticated SSH
+session, keyed by a UUID; an IP alone would not do, because one IP can run many sessions.
+\code{session\_actions} holds one row per command with the full RL record: the state, the action,
+the Q-values before the decision, the reward, whether the attacker continued, and the
+Q-values after the update. \code{login\_attempts} records every credential tried. The schema
+is in third normal form; per-attacker counters are stored redundantly for dashboard speed and
+maintained by idempotent upserts.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  ent/.style={draw, rectangle split, rectangle split parts=2, rounded corners=2pt, font=\scriptsize\ttfamily,
+              align=left, text width=5.4cm, rectangle split part fill={blue!8,white}},
+  node distance=1.1cm and 1.3cm]
+  \node[ent] (att) {\textbf{attackers}\nodepart{two}\underline{src\_ip} INET\\first\_seen, last\_seen\\total\_connections\\total\_sessions\\total\_login\_attempts\\total\_commands\\country\_code, country, city\\latitude, longitude};
+  \node[ent, right=of att] (ses) {\textbf{sessions}\nodepart{two}\underline{session\_id} UUID\\src\_ip $\rightarrow$ attackers\\username, password, pty, term\\started\_at, ended\_at, duration\_s\\command\_count, end\_reason\\total\_reward, epsilon, episode};
+  \node[ent, below=of ses] (act) {\textbf{session\_actions}\nodepart{two}\underline{session\_id, seq}\\session\_id $\rightarrow$ sessions\\ts, command, category, phase\\state, action, epsilon, q\_before\\reward, continued, next\_state\\q\_after, latency\_ms, output\_bytes};
+  \node[ent, below=of att] (log) {\textbf{login\_attempts}\nodepart{two}\underline{id} BIGSERIAL\\src\_ip $\rightarrow$ attackers\\ts, username, password\\attempt, success};
+  \draw[thick] (att.east) -- node[above, font=\scriptsize] {1 : N} (ses.west);
+  \draw[thick] (ses.south) -- node[right, font=\scriptsize] {1 : N} (act.north);
+  \draw[thick] (att.south) -- node[left, font=\scriptsize] {1 : N} (log.north);
+\end{tikzpicture}
+\caption{Entity--relationship diagram. Foreign keys cascade on delete.}
+\label{fig:er}
+\end{figure}
+
+\section{Event Schema}
+
+Every event is a JSON object with a \code{type}, an ISO-8601 timestamp, the source address
+and a session UUID where one exists. Listing~\ref{lst:event} shows a \code{command} event.
+
+\begin{lstlisting}[caption={A \code{command} event as written to the stream.}, label={lst:event}]
+{"type": "command", "ts": "2026-11-15T07:45:05.214+00:00",
+ "session_id": "c18e6944-cff3-4227-ab47-9163fca6b56d",
+ "src_ip": "203.0.113.7", "src_port": 49321, "seq": 3,
+ "command": "cat /etc/shadow", "category": "cred_access",
+ "phase": "early", "state": "cred_access|early", "action": "FAKE",
+ "epsilon": 0.2241, "q_values": {"ALLOW": 1.27, "DELAY": 0.0, "FAKE": 1.41,
+ "TARPIT": -0.03, "BLOCK": 0.0}, "latency_ms": 1, "output_bytes": 1184,
+ "decoys_planted": true}
+\end{lstlisting}
+
+\section{Technology Stack}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Concern} & \textbf{Technology} \\
+\midrule
+Language & Python 3.12 (AsyncIO throughout) \\
+SSH server & AsyncSSH~\cite{asyncssh} \\
+Event bus & Redis 7 Streams (append-only file persistence) \\
+Database & PostgreSQL 16 (asyncpg driver) \\
+Enrichment & MaxMind GeoLite2~\cite{maxmind} (optional) \\
+Dashboard & FastAPI~\cite{fastapi}, Jinja2, server-side SVG charts \\
+Simulation and analysis & NumPy, SciPy, Matplotlib \\
+Deployment & Docker, Docker Compose \\
+Testing & pytest, pytest-asyncio, httpx \\
+\bottomrule
+\end{tabular}
+\caption{Technology stack}
+\label{tab:stack}
+\end{table}

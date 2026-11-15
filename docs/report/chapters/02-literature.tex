@@ -1,0 +1,110 @@
+\chapter{Literature Review}
+\label{ch:lit}
+
+\section{Honeypots}
+
+Spitzner defines a honeypot as ``an information system resource whose value lies in
+unauthorised or illicit use of that resource''~\cite{spitzner2002honeypots}. Because a honeypot
+has no legitimate users, every interaction with it is suspect, which gives it a very low
+false-positive rate compared with detection systems deployed on production traffic.
+
+Honeypots are usually classified by the degree of interaction they allow:
+
+\begin{description}
+  \item[Low interaction] systems emulate a service only up to the point of recording a
+    connection or a login attempt. Honeyd~\cite{provos2004honeyd} emulates whole networks of
+    such hosts. They are cheap and safe but reveal little about post-compromise behaviour.
+  \item[High interaction] systems give the attacker a real operating system, usually a
+    virtual machine that is monitored and reset. They capture the most realistic behaviour, but
+    they are expensive to operate and risky, because the attacker controls a real machine that
+    can be used to attack others.
+  \item[Medium interaction] systems emulate an operating system's user-facing behaviour (a
+    shell, a filesystem, command output) in software. Attackers can run commands, but nothing
+    they type is executed. This is the design point of Kippo, Cowrie~\cite{cowrie} and of this
+    project.
+\end{description}
+
+\section{SSH Honeypots}
+
+Kippo, and its maintained successor Cowrie~\cite{cowrie}, are the most widely deployed
+medium-interaction SSH honeypots. Cowrie emulates a Debian system with a fake filesystem,
+logs login attempts and commands, records sessions for replay, and stores files that attackers
+download. Its emulation is \emph{static}: responses depend only on the command and the state of
+the fake filesystem. Studies built on such honeypots consistently find that most SSH
+traffic is automated: a few credential pairs dominate, and post-login activity is a short
+script of reconnaissance followed by a download-and-execute step. Interactive human sessions
+are rarer but longer and more varied. Our attacker model (Chapter~\ref{ch:formulation})
+reflects these qualitative findings.
+
+\section{Adaptive Honeypots}
+
+The idea that a honeypot should \emph{choose} its responses predates the use of RL. Wagener
+et al.'s Heliza~\cite{wagener2011heliza} is a high-interaction honeypot that can allow, block,
+substitute or insult attacker commands. It models the interaction as a game and uses
+reinforcement learning to pursue goals such as collecting attacker tools or wasting their time.
+
+Pauna and Bica's RASSH~\cite{pauna2014rassh} brought the idea to a medium-interaction SSH
+honeypot built on Kippo. Its agent chooses among allowing, delaying, faking and insulting
+commands, with SARSA learning a policy that rewards prolonged interaction. A later version
+replaced the table with a deep Q-network~\cite{pauna2018qrassh}. Dowling, Schukat and
+Barrett~\cite{dowling2018conceal} used RL to keep attackers engaged with an IoT honeypot and
+to conceal honeypot functionality.
+
+Two observations from this literature shape the present work.
+
+\begin{enumerate}
+  \item \textbf{The action sets are similar.} Allow, delay, fake and block recur. ``Insult''
+    also appears, but it gives the honeypot away, so we replace it with a \emph{tarpit}, which
+    dribbles output slowly and is an established deception technique against automated tools.
+  \item \textbf{Evaluation is the weak point.} Adaptive honeypots are typically evaluated by
+    deploying them for some weeks and reporting engagement statistics. That shows the system
+    works, but it cannot compare policies fairly (different policies meet different attackers
+    on different days). It also cannot say how far a learned policy is from what is achievable.
+    Our contribution is an evaluation methodology that does both, using exact computation on a
+    generative attacker model.
+\end{enumerate}
+
+\section{Reinforcement Learning Background}
+
+Reinforcement learning~\cite{sutton2018rl} studies agents that learn to act from rewards
+through interaction. When the environment is a finite Markov decision process with unknown
+dynamics, \emph{Q-learning}~\cite{watkins1992q} learns the optimal action-value function from
+samples using the temporal-difference update
+\[
+Q(s,a) \leftarrow Q(s,a) + \alpha\big[r + \gamma \max_{a'} Q(s',a') - Q(s,a)\big].
+\]
+Watkins and Dayan proved convergence to the optimum with probability one, provided every
+state--action pair is updated infinitely often and the step sizes satisfy the Robbins--Monro
+conditions $\sum_n \alpha_n = \infty$ and $\sum_n \alpha_n^2 < \infty$~\cite{robbins1951}.
+Even-Dar and Mansour~\cite{evendar2003rates} showed that the \emph{rate} of convergence depends
+strongly on the schedule: polynomial rates $\alpha_n = n^{-\omega}$ with $\tfrac12 < \omega < 1$
+converge polynomially, whereas $\alpha_n = 1/n$ can need exponentially many samples. In
+practice a constant step size is common, because it keeps tracking a changing environment. The
+price is that the estimate never settles. Chapter~\ref{ch:results} shows that in our setting
+this price is decisive.
+
+\emph{SARSA}~\cite{sutton2018rl} is the on-policy counterpart of Q-learning: it bootstraps from
+the action actually taken next rather than the greedy one. \emph{Double
+Q-learning}~\cite{vanhasselt2010double} removes the upward bias introduced by the max operator.
+
+When the agent observes only part of the state, the problem becomes a partially observable
+MDP (POMDP). Singh, Jaakkola and Jordan~\cite{singh1994pomdp} showed that the best policy over
+observations alone may need to be stochastic, and that TD methods applied directly to
+observations may converge to sub-optimal policies or not at all. A honeypot cannot see the
+attacker's type or intent, only their commands, so this result is directly relevant.
+
+\section{Event Streaming and Storage}
+
+Separating event capture from processing through a durable log is a standard architecture
+for telemetry systems. Redis Streams~\cite{redisstreams} provide an append-only log with
+consumer groups, per-consumer pending-entry lists and explicit acknowledgement. This supports
+at-least-once delivery without a heavier platform such as Kafka. PostgreSQL provides the
+relational model, transactions and indexing that investigative queries need.
+
+\section{Research Gap}
+
+Existing adaptive SSH honeypots demonstrate feasibility but report neither how their learned
+policy compares with the best achievable policy nor how the benefit depends on the attacker
+population. This project contributes (i) a formal model in which those quantities are
+defined, (ii) an exact method to compute them, and (iii) an honest measurement of the benefit,
+including the conditions under which a static honeypot is already near-optimal.

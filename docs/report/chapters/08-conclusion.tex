@@ -1,0 +1,64 @@
+\chapter{Conclusion and Future Work}
+\label{ch:conclusion}
+
+\section{Conclusion}
+
+This project set out to test whether an SSH honeypot that chooses its responses can capture more
+attacker behaviour than one that does not, and to measure the benefit rigorously.
+
+We built \textbf{CruxTrap}, a complete five-service system. It consists of a safe
+medium-interaction honeypot with a per-session emulated Ubuntu server and over 200 emulated
+command names, an online reinforcement-learning response policy, an at-least-once event pipeline
+through Redis Streams into PostgreSQL, and an analyst dashboard with session replay and a view of
+the learned policy. The system is containerised with defence-in-depth hardening. Its key safety
+and availability properties were verified on the running deployment: an unprivileged, read-only,
+capability-free honeypot that cannot reach the database, and continued attack capture through
+Redis, pipeline and database outages.
+
+We formalised the honeypot's problem as an MDP whose reward measures captured intelligence, and
+identified that it is partially observable because the attacker's type is hidden. For evaluation
+we built a generative attacker model and an \emph{exact} evaluator. The evaluator computes each
+policy's expected return, engagement and intelligence by solving the Bellman equations on a
+330-state augmented chain; it also gives an oracle upper bound and the best policy available to
+the honeypot's own state.
+
+The main findings are:
+\begin{enumerate}
+  \item Q-learning beats a static honeypot with high confidence ($5.686$ against $5.542$,
+    $p = 5.8 \times 10^{-6}$) and recovers 60\% of the achievable improvement. It does this by
+    discovering, without supervision, a single robust deception: serving decoy credentials to
+    attackers who are searching for credentials.
+  \item This holds only with a step size that satisfies the Robbins--Monro conditions. With the
+    conventional constant learning rate the agent did worse than static, because the estimates
+    never settle and noise decides the greedy action. An ablation confirmed the explanation.
+  \item The benefit is modest and depends on the population: it is negligible against scripted
+    bots and about 5\% against human-heavy traffic. Adaptation pays where attackers adapt.
+  \item Exploration while live costs about as much as adaptation gains, so a deployment should
+    reduce exploration once the policy has settled.
+\end{enumerate}
+
+The broader lesson is methodological. Deploying an adaptive honeypot and reporting that
+attackers stayed longer does not establish that adaptation helped. A model with exact evaluation
+makes it possible to ask how much better a policy is, compared with what is achievable, and
+against whom.
+
+\section{Future Work}
+
+\begin{itemize}
+  \item \textbf{Real-traffic study.} Deploy the honeypot on a Linux host with a public address.
+    Fit the attacker model to sessions captured under the static policy, then compare the learned
+    and static policies on live traffic with an interleaved (A/B) design.
+  \item \textbf{Richer state.} Add the previous action, a short command history, or a belief over
+    the attacker type estimated from inter-command timing. The posterior in
+    Figure~\ref{fig:posterior} suggests that even a coarse type estimate is valuable. Beyond a few
+    hundred states, linear function approximation or a small DQN becomes appropriate.
+  \item \textbf{Exploration and bias.} Use GLIE schedules for deployment, optimistic
+    initialisation or double Q-learning for the late-state bias, and off-policy evaluation from
+    logged data.
+  \item \textbf{Durability.} Use a disk-backed spool in the emitter so that events survive a
+    simultaneous Redis outage and honeypot crash.
+  \item \textbf{Capture.} Add SFTP/SCP file capture, sandboxed analysis of downloaded payloads, and
+    threat-intelligence enrichment of indicators.
+  \item \textbf{Operations.} Add dashboard authentication and HTTPS, alerting, SIEM export, and
+    orchestration (for example Kubernetes) for multi-sensor deployments.
+\end{itemize}

@@ -1,0 +1,46 @@
+\chapter*{List of Abbreviations and Symbols}
+\addcontentsline{toc}{chapter}{List of Abbreviations and Symbols}
+
+\begin{tabular}{@{}p{3.2cm}p{10cm}@{}}
+\toprule
+\textbf{Abbreviation} & \textbf{Meaning} \\
+\midrule
+ACID & Atomicity, Consistency, Isolation, Durability \\
+CI & Confidence interval (95\%, Student-$t$, over seeds) \\
+CSP & Content Security Policy \\
+DP & Dynamic programming \\
+GLIE & Greedy in the limit with infinite exploration \\
+MDP & Markov decision process \\
+MLE & Maximum-likelihood estimate \\
+PEL & Pending Entries List (Redis Streams) \\
+POMDP & Partially observable Markov decision process \\
+PTY & Pseudo-terminal \\
+RL & Reinforcement learning \\
+SOC & Security operations centre \\
+SSH & Secure Shell \\
+TD & Temporal difference \\
+XSS & Cross-site scripting \\
+\bottomrule
+\end{tabular}
+
+\vspace{1.2em}
+\begin{tabular}{@{}p{3.2cm}p{10cm}@{}}
+\toprule
+\textbf{Symbol} & \textbf{Meaning} \\
+\midrule
+$\kappa_t \in \mathcal{K}$ & Command category of the $t$-th command ($|\mathcal{K}| = 10$) \\
+$\phi_t \in \Phi$ & Session phase: early, mid, late \\
+$s_t = (\kappa_t,\phi_t)$ & Honeypot's observed state ($|\mathcal{S}| = 30$) \\
+$a_t \in \mathcal{A}$ & Response action ($|\mathcal{A}| = 5$) \\
+$k$ & Hidden attacker type (bot, script kiddie, operator) \\
+$v(\kappa)$ & Intelligence value of observing a command of category $\kappa$ \\
+$\chi(a)$ & Friction cost of action $a$ (seconds of attacker time) \\
+$w_e, w_v, w_c, w_b$ & Reward weights: engagement, value, cost, justified block \\
+$\gamma$ & Discount factor (0.9) \\
+$\alpha_n$ & Step size of the $n$-th update of a state--action pair \\
+$\varepsilon$ & Exploration rate of the $\varepsilon$-greedy behaviour policy \\
+$Q(s,a)$ & Action-value estimate \\
+$P_\pi,\ r_\pi$ & Transition matrix and expected reward induced by policy $\pi$ \\
+$V_\pi,\ N_\pi$ & Value vector and fundamental matrix of policy $\pi$ \\
+\bottomrule
+\end{tabular}

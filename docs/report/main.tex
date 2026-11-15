@@ -1,0 +1,117 @@
+% CruxTrap - B.Tech project report
+% Build: see README.md in this folder (docker + latexmk), or any TeX Live with latexmk.
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ---------------------------------------------------------------- details
+% Everything in red [brackets] in the PDF must be filled in before submission.
+\newcommand{\fillme}[1]{\textcolor{red}{[#1]}}
+\newcommand{\projecttitle}{CruxTrap: An Adaptive SSH Honeypot with a\\ Reinforcement-Learning Response Policy}
+\newcommand{\projecttitleplain}{CruxTrap: An Adaptive SSH Honeypot with a Reinforcement-Learning Response Policy}
+\newcommand{\studentname}{Mohd Kalam}
+\newcommand{\rollno}{\fillme{Roll No., e.g. 2K23/MC/xx}}
+\newcommand{\supervisor}{\fillme{Supervisor's name}}
+\newcommand{\supervisordesig}{\fillme{Designation}}
+\newcommand{\department}{Department of Applied Mathematics}
+\newcommand{\university}{Delhi Technological University}
+\newcommand{\universityaddr}{(Formerly Delhi College of Engineering)\\ Bawana Road, Delhi -- 110042}
+\newcommand{\degree}{Bachelor of Technology}
+\newcommand{\branch}{Mathematics and Computing}
+\newcommand{\coursename}{\fillme{Course code and name, e.g. MC4xx Major Project}}
+\newcommand{\submissionmonth}{\fillme{Month Year}}
+\newcommand{\repourl}{https://github.com/mohd-kalam121/cruxtrap}
+
+% --------------------------------------------------------------- packages
+\usepackage[a4paper,left=1.4in,right=1in,top=1in,bottom=1in]{geometry}
+\usepackage{setspace}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.multipart,fit,calc,backgrounds}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+
+\onehalfspacing
+\setlength{\parskip}{0.4em}
+\setlength{\emergencystretch}{2.5em}  % lets paragraphs absorb long \code{} tokens
+\captionsetup{font=small,labelfont=bf}
+\setlist{itemsep=0.15em,topsep=0.3em}
+\graphicspath{{figures/}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\nouppercase{\leftmark}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+\definecolor{codebg}{HTML}{F6F8FA}
+\lstset{basicstyle=\ttfamily\small,backgroundcolor=\color{codebg},frame=single,rulecolor=\color{gray!40},
+  breaklines=true,columns=fullflexible,keepspaces=true,showstringspaces=false,
+  keywordstyle=\color{blue!60!black}\bfseries,commentstyle=\color{gray},xleftmargin=2pt,xrightmargin=2pt}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[chapter]
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\act}[1]{\textsc{#1}}
+\newcommand{\E}{\mathbb{E}}
+
+% TikZ styles shared by diagrams
+\tikzset{
+  box/.style={draw, rounded corners=3pt, minimum height=1.0cm, minimum width=2.6cm, align=center, font=\small, fill=white},
+  store/.style={draw, cylinder, shape border rotate=90, aspect=0.18, minimum height=1.2cm, minimum width=2.4cm, align=center, font=\small, fill=white},
+  arr/.style={-{Stealth[length=2.2mm]}, thick},
+  lbl/.style={font=\footnotesize, align=center},
+}
+
+\begin{document}
+
+% ================================================================ front matter
+\pagenumbering{roman}
+\input{chapters/00-frontmatter}
+
+\tableofcontents
+\clearpage
+\listoffigures
+\clearpage
+\listoftables
+\clearpage
+\input{chapters/00-abbreviations}
+
+% ================================================================ chapters
+\clearpage
+\pagenumbering{arabic}
+\input{chapters/01-introduction}
+\input{chapters/02-literature}
+\input{chapters/03-design}
+\input{chapters/04-formulation}
+\input{chapters/05-implementation}
+\input{chapters/06-testing}
+\input{chapters/07-results}
+\input{chapters/08-conclusion}
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{References}
+\bibliographystyle{unsrt}
+\bibliography{refs}
+
+\appendix
+\input{chapters/09-appendix}
+
+\end{document}

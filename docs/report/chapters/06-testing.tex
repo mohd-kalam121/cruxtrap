@@ -1,0 +1,103 @@
+\chapter{Testing and Verification}
+\label{ch:testing}
+
+Testing had three layers: automated tests that run in four seconds to two minutes, security
+verification of the running containers, and failure experiments on the live stack. The second
+and third layers found four defects that the automated tests had missed (Section~\ref{sec:bugs}).
+
+\section{Automated Tests}
+
+The 111 tests run with \code{python -m pytest}. Pipeline and dashboard tests use a separate
+\code{cruxtrap\_test} database and a unique stream name per test, so they never touch collected
+data, and they are skipped if Redis or PostgreSQL is not running.
+
+\begin{longtable}{@{}p{4.2cm}cp{8.6cm}@{}}
+\toprule
+\textbf{Test module} & \textbf{Tests} & \textbf{What is verified} \\
+\midrule
+\endhead
+\code{test\_classify} & 25 & Category of 22 representative commands, including \code{sudo}-prefixed and chained lines; phase boundaries. \\
+\code{test\_fakefs} & 8 & Ubuntu layout; path resolution (\code{..}, \code{\textasciitilde}); write/append/remove; permissions for non-root users; isolation between sessions; decoys are placeholders and idempotent. \\
+\code{test\_shell} & 15 & Prompt and \code{cd}; recon output; \code{ls} variants; chaining, pipes, \code{||}; redirection and script execution; the download-and-execute flow; persistence (\code{authorized\_keys}, \code{crontab}, \code{useradd}); non-root restrictions; decoy mode; 15 malformed inputs never raise. \\
+\code{test\_policies} & 12 & Reward function; justified-block bonus; static and warm-start behaviour; Q-learning learns the better action in a toy problem; SARSA and bandit updates; $\varepsilon$ decay; step-size schedules; checkpoint round-trip. \\
+\code{test\_emitter} & 4 & Ordered forwarding; \code{emit} never blocks on a slow Redis; an outage buffers events and then delivers them all, in order; the bounded buffer drops the oldest events. \\
+\code{test\_server} & 5 & A real SSH client against the server: \code{exec} round trip; an interactive session that produces the expected categories, TD updates and checkpoint; \act{block} closes the connection; \act{fake}, \act{tarpit} and \act{delay} still answer; the $N$-th-attempt login policy. \\
+\code{test\_pipeline} & 12 & A full session lands in all four tables; idempotent redelivery; command before session start; dead-lettering; replay after a crash; claiming orphans of a dead consumer; an idle blocking read; Redis outage; group recreation; \textbf{SSH client $\rightarrow$ honeypot $\rightarrow$ Redis $\rightarrow$ pipeline $\rightarrow$ PostgreSQL}. \\
+\code{test\_dashboard} & 20 & Every page renders with and without data; session replay; JSON statistics; \textbf{injected \code{<script>} never rendered}; security headers; 404 handling; 503 on database outage. \\
+\code{test\_simulator} & 10 & Model rows are probability distributions; \textbf{Monte-Carlo means within 4 standard errors of the exact values} (static, random and a trained policy, 30{,}000 episodes each); benchmark ordering oracle $\ge$ best observable $\ge$ static; Bellman residual of value iteration $< 10^{-8}$; MLE recovers a known chain; type posterior. \\
+\bottomrule
+\caption{Automated test suite.}
+\label{tab:tests}
+\end{longtable}
+
+\section{Security Verification}
+
+The properties claimed in Table~\ref{tab:hardening} were checked on the running containers:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Check (inside the honeypot container)} & \textbf{Observed} \\
+\midrule
+\code{id} & \code{uid=10001(cruxtrap) gid=10001(cruxtrap)} \\
+\code{touch /app/x} & \code{Read-only file system} \\
+\code{CapEff} in \code{/proc/self/status} & \code{0000000000000000} \\
+connect to \code{postgres:5432} & \code{Name or service not known} \\
+connect to \code{redis:6379} & succeeds \\
+Host listeners on 2222, 6379, 8000, 55432 & all bound to \code{127.0.0.1} \\
+\bottomrule
+\end{tabular}
+\caption{Security verification on the live deployment.}
+\label{tab:secverify}
+\end{table}
+
+\section{Failure Experiments}
+
+Each component downstream of the honeypot was stopped in turn. SSH sessions were opened during
+the outage, and the component was then restarted.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{@{}lccX@{}}
+\toprule
+\textbf{Outage} & \textbf{Attackers served} & \textbf{Recovered} & \textbf{Observation} \\
+\midrule
+Redis & yes & all & Honeypot logged \emph{buffering events}, then \emph{forwarding 23 buffered events} \\
+PostgreSQL & 4/4 & 4/4 & Events waited in the stream; dashboard returned 503; pipeline did not restart \\
+Pipeline & 4/4 & 4/4 & Resumed from its consumer-group position \\
+None (idle 40\,s) & -- & -- & 0 restarts (regression check for defect D2) \\
+\bottomrule
+\end{tabularx}
+\caption{Behaviour under component failure. After all scenarios there were no dead-lettered events and no command without a recorded reward.}
+\label{tab:outages}
+\end{table}
+
+\paragraph{Limitation.} The emitter's buffer is held in memory, so events emitted during a
+Redis outage are lost if the honeypot process also crashes before Redis returns. A disk-backed
+spool would close this gap.
+
+\section{Defects Found by Running the System}
+\label{sec:bugs}
+
+\begin{longtable}{@{}p{0.6cm}p{4.2cm}p{4.6cm}p{4.2cm}@{}}
+\toprule
+& \textbf{Symptom} & \textbf{Cause} & \textbf{Fix} \\
+\midrule
+\endhead
+D1 & Pipeline crashed on the first scanner that disconnected without logging in & The attacker upsert with no counters to increment generated invalid SQL & Correct SQL generation; non-transient database errors are dead-lettered instead of crashing \\
+D2 & Pipeline container restarted every few seconds when idle & The client socket timeout was shorter than the \code{XREADGROUP BLOCK} window, and the code caught Python's \code{ConnectionError} rather than redis-py's exceptions & Socket timeout longer than the block window; catch \code{RedisError}; recreate the group on \code{NOGROUP} \\
+D3 & Every attacker was disconnected while Redis was down & The emitter awaited \code{XADD} inside SSH authentication & Store-and-forward emitter \\
+D4 & Dashboard charts were blank & The CSP \code{style-src 'self'} blocked the inline style attributes that set bar widths & Allow inline styles only; scripts remain same-origin only \\
+D5 & Exact solver about 100$\times$ slower than expected & Multi-threaded OpenBLAS overhead on $330 \times 330$ solves & Pin BLAS to one thread; parallelise across processes instead \\
+\bottomrule
+\caption{Defects found by running the system rather than by unit tests.}
+\label{tab:bugs}
+\end{longtable}
+
+D1--D3 share a lesson: unit tests exercised each component in its steady state, but each defect
+appeared only at a boundary (an unauthenticated client, an idle period, a dependency outage).
+D3 is the most significant, because it contradicted the architecture's central claim that
+capture does not depend on downstream components. Each of D1--D3 now has a regression test.

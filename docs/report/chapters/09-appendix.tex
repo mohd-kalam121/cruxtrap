@@ -1,0 +1,58 @@
+\chapter{Running the System}
+\label{app:run}
+
+\section{Deployment}
+
+\begin{lstlisting}[language=bash]
+git clone https://github.com/mohd-kalam121/cruxtrap && cd cruxtrap
+docker compose up -d --build          # all five services, localhost only
+ssh -p 2222 root@127.0.0.1            # the honeypot (N-th password attempt succeeds)
+# dashboard: http://127.0.0.1:8000
+
+# Real deployment on a Linux host: expose only the honeypot, on port 22
+HONEYPOT_BIND=0.0.0.0 HONEYPOT_PORT=22 docker compose up -d
+\end{lstlisting}
+
+\section{Reproducing the Results}
+
+\begin{lstlisting}[language=bash]
+python -m venv .venv && . .venv/bin/activate
+pip install -r honeypot/requirements.txt -r simulator/requirements.txt
+python -m simulator.experiments       # ~1 min; writes docs/results and docs/figures
+python -m pytest                      # 111 tests (needs Redis/PostgreSQL for 32 of them)
+\end{lstlisting}
+
+\section{Configuration}
+
+\begin{longtable}{@{}p{5.2cm}p{2.6cm}p{6cm}@{}}
+\toprule
+\textbf{Variable} & \textbf{Default} & \textbf{Meaning} \\
+\midrule
+\endhead
+\code{HONEYPOT\_BIND}, \code{HONEYPOT\_PORT} & 127.0.0.1, 2222 & Host address and port of the honeypot \\
+\code{HONEYPOT\_HOSTNAME} & ubuntu-srv01 & Hostname shown to attackers \\
+\code{RL\_POLICY} & qlearn & qlearn, sarsa, bandit, random or static \\
+\code{RL\_ALPHA\_SCHEDULE} & visit & visit ($\alpha_n = \max(\alpha_{\min}, n^{-\omega})$) or constant \\
+\code{RL\_ALPHA\_OMEGA}, \code{RL\_ALPHA\_MIN} & 0.7, 0 & Step-size exponent and floor \\
+\code{RL\_GAMMA}, \code{RL\_EPSILON0} & 0.9, 0.3 & Discount factor and initial exploration rate \\
+\code{LOGIN\_ATTEMPTS\_MIN/MAX} & 1, 3 & Range of the accepted attempt number $N$ \\
+\code{REWARD\_W\_*} & 1, 0.5, 0.02, 2 & Reward weights $w_e, w_v, w_c, w_b$ \\
+\code{POSTGRES\_PORT}, \code{DASHBOARD\_PORT} & 55432, 8000 & Host ports (localhost) \\
+\bottomrule
+\caption{Configuration variables.}
+\end{longtable}
+
+\chapter{Repository Structure}
+
+\begin{lstlisting}
+honeypot/      AsyncSSH server, session runner, shell emulator, commands (cmds/),
+               fake filesystem, classifier, RL policies (rl/), event emitter
+pipeline/      Redis Streams consumer, GeoIP enrichment, PostgreSQL writes
+dashboard/     FastAPI app, queries, SVG charts, Jinja2 templates, static assets
+simulator/     attacker model, Monte-Carlo environment, exact DP solver,
+               MLE fitting, experiments, figures
+db/init.sql    PostgreSQL schema
+docs/          problem statement, MDP formulation, deployment and resilience,
+               evaluation, results, figures, this report
+scripts/       demo traffic generator
+\end{lstlisting}

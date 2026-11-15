@@ -1,0 +1,117 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+\section{Background}
+
+Secure Shell (SSH) is the standard protocol for remote administration of Unix-like servers,
+and it is among the most heavily attacked services on the Internet. A server with port 22
+exposed receives password-guessing attempts within minutes of going online; logs such as
+the \code{auth.log} reproduced inside our own decoy filesystem are typical. Most of this
+traffic comes from automated tools that try common credentials and, on success, run a short
+script to download and execute a payload. A smaller share comes from human operators who
+explore the system, look for credentials, escalate privileges and install persistence.
+
+Conventional defences (firewalls, rate limiting, intrusion prevention, tools such as
+\emph{fail2ban}) are designed to \emph{block} this traffic. Blocking is the right choice for a
+production server, but it discards the most informative part of an attack: what the attacker
+does after gaining access. Which commands do they run first? Which files do they look for?
+Where do they download payloads from, and how do they try to persist?
+
+A \emph{honeypot} answers these questions by inverting the defensive posture. It is a decoy
+system with no production value, so any interaction with it is suspicious by definition. It
+deliberately admits attackers and records everything they do~\cite{spitzner2002honeypots}.
+SSH honeypots such as Kippo and its successor Cowrie~\cite{cowrie} emulate a Linux shell,
+log credentials and commands, and capture downloaded files, and they are widely used by
+security researchers.
+
+\section{Motivation}
+
+Established SSH honeypots respond \emph{statically}: a given command always produces the same
+emulated output, whoever sends it and whatever has happened before. This has two consequences.
+
+\begin{enumerate}
+  \item \textbf{Static honeypots cannot make trade-offs.} Sometimes the most informative
+    response is the faithful one, because it keeps the attacker engaged. Sometimes a decoy is
+    better: a planted credential file can lure an attacker into revealing their next tool. Slowing
+    a scripted bot down wastes its time, and disconnecting is reasonable once a session has
+    stopped producing information. A fixed policy can make none of these choices.
+  \item \textbf{Static honeypots are fingerprintable.} Fixed responses are easy to recognise,
+    and an attacker who detects a honeypot stops behaving naturally.
+\end{enumerate}
+
+Reinforcement learning (RL) offers a principled way to choose responses: treat each attacker
+session as an episode, each response as an action, and the information captured as reward.
+Prior work on adaptive honeypots, reviewed in Chapter~\ref{ch:lit}, has shown that this is
+feasible. It has rarely asked a quantitative question, though: \emph{how much} better does a
+learned policy do than a static one, against which attackers, and compared with what is
+achievable at all?
+
+\section{Problem Statement}
+
+\begin{quote}
+\emph{Design, implement and evaluate an SSH honeypot whose per-command response is chosen by
+a reinforcement-learning policy, with the objective of maximising the quantity and value of
+attacker behaviour captured per session, while remaining safe: no attacker input is ever
+executed on the host.}
+\end{quote}
+
+The project addresses two research questions:
+
+\begin{itemize}
+  \item[\textbf{RQ1.}] Does a learned response policy capture more attacker behaviour than a
+    static honeypot?
+  \item[\textbf{RQ2.}] How does the answer depend on the composition of the attacker population
+    and on what the defender values?
+\end{itemize}
+
+\section{Objectives}
+
+\begin{enumerate}[label=\textbf{O\arabic*.}]
+  \item Build a safe, medium-interaction SSH honeypot that emulates an Ubuntu 22.04 server with
+    a per-session in-memory filesystem and over 200 emulated command names.
+  \item Formalise honeypot--attacker interaction as a Markov decision process.
+  \item Implement an online RL response policy (Q-learning) together with SARSA, bandit,
+    static and random baselines that share one interface.
+  \item Build an event-driven telemetry pipeline (Redis Streams $\rightarrow$ GeoIP enrichment
+    $\rightarrow$ PostgreSQL) with at-least-once delivery.
+  \item Build a SOC-style analyst dashboard with session replay and a view of the learned policy.
+  \item Deploy all five services reproducibly with Docker Compose, harden the exposed
+    component, and measure behaviour under component failure.
+  \item Build an attacker simulator and an exact dynamic-programming evaluator, and use them to
+    answer RQ1 and RQ2 with benchmarks, confidence intervals and hypothesis tests.
+\end{enumerate}
+
+\section{Contributions}
+
+\begin{itemize}
+  \item A working five-service system (about 4{,}900 lines of Python and 500 lines of templates, CSS and JavaScript, with 111 automated tests), open
+    for inspection at \url{\repourl}.
+  \item A formal MDP model of adaptive honeypot responses whose reward measures captured
+    intelligence, with a clear account of why the problem is partially observable.
+  \item An \emph{exact} evaluation methodology. Each policy's expected return, engagement and
+    captured intelligence are computed by solving linear systems on an augmented chain. We also
+    compute an oracle upper bound by value iteration and the best policy over the honeypot's own
+    observations. Monte-Carlo simulation is used only to validate this machinery.
+  \item Empirical findings, including a negative one. Q-learning beats a static honeypot with
+    high confidence and recovers 60\% of the available gain, but only with a Robbins--Monro
+    step-size schedule. The conventional constant learning rate makes it \emph{worse} than
+    static, as stochastic-approximation theory predicts. The benefit scales with the share of
+    human attackers.
+\end{itemize}
+
+\section{Scope}
+
+\textbf{In scope:} SSH password authentication, interactive and \code{exec} sessions, command
+emulation, the response policy, telemetry, the dashboard, containerised deployment and
+simulation-based evaluation.
+\textbf{Out of scope:} SFTP/SCP file capture, sandboxed analysis of downloaded payloads,
+protocols other than SSH, and dashboard authentication (listed as future work).
+
+\section{Organisation of the Report}
+
+Chapter~\ref{ch:lit} reviews honeypots and adaptive honeypots. Chapter~\ref{ch:design} gives
+the requirements and system design. Chapter~\ref{ch:formulation} develops the mathematical
+formulation: the MDP, the learning algorithm and its convergence conditions, the attacker
+model and the exact evaluation method. Chapter~\ref{ch:impl} describes the implementation.
+Chapter~\ref{ch:testing} covers testing, security verification and failure experiments.
+Chapter~\ref{ch:results} presents the evaluation, and Chapter~\ref{ch:conclusion} concludes.

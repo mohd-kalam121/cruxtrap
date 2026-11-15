@@ -21,6 +21,7 @@ honeypot/rl/qtable*.json
 simulator/results/
 *.png
 !docs/figures/*.png
+!docs/report/figures/*.png
 
 # Env / secrets
 .env
@@ -30,3 +31,16 @@ simulator/results/
 Thumbs.db
 .vscode/
 .idea/
+
+# LaTeX build artifacts
+docs/report/*.aux
+docs/report/**/*.aux
+docs/report/*.toc
+docs/report/*.lof
+docs/report/*.lot
+docs/report/*.out
+docs/report/*.bbl
+docs/report/*.blg
+docs/report/*.fls
+docs/report/*.fdb_latexmk
+docs/report/*.synctex.gz

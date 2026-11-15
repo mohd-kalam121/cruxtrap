@@ -1,0 +1,109 @@
+% ---------------------------------------------------------------- title page
+\begin{titlepage}
+\begin{center}
+\vspace*{0.2cm}
+{\LARGE\bfseries \projecttitle\par}
+\vspace{1.2cm}
+{\large A Project Report\\[0.2em] submitted in partial fulfilment of the requirements\\ for the award of the degree of\par}
+\vspace{0.6cm}
+{\Large\bfseries \degree\\[0.2em] in\\[0.2em] \branch\par}
+\vspace{1.0cm}
+{\large Submitted by\par}
+\vspace{0.2cm}
+{\large\bfseries \studentname\par}
+{\large \rollno\par}
+\vspace{0.9cm}
+{\large Under the supervision of\par}
+\vspace{0.2cm}
+{\large\bfseries \supervisor\par}
+{\large \supervisordesig\par}
+\vfill
+% Add the DTU logo here if your department requires it:
+% \includegraphics[width=3cm]{dtu_logo.png}\\[0.6cm]
+{\large\bfseries \department\par}
+{\large\bfseries \university\par}
+{\large \universityaddr\par}
+\vspace{0.4cm}
+{\large \submissionmonth\par}
+\end{center}
+\end{titlepage}
+
+% --------------------------------------------------------- declaration
+\chapter*{Candidate's Declaration}
+\addcontentsline{toc}{chapter}{Candidate's Declaration}
+I, \studentname{} (\rollno), a student of \degree{} in \branch{}, hereby declare that the
+project report titled \emph{``\projecttitleplain''}, submitted to the \department{},
+\university{}, in partial fulfilment of the requirements for the award of the degree of
+\degree{}, is an original record of my work carried out under the supervision of \supervisor{}.
+This work has not been submitted, in part or in full, for the award of any other degree or
+diploma at this or any other institution.
+
+\vspace{2.5cm}
+\noindent Place: Delhi \hfill \studentname\\
+Date: \fillme{Date} \hfill \rollno
+
+% --------------------------------------------------------- certificate
+\chapter*{Certificate}
+\addcontentsline{toc}{chapter}{Certificate}
+I hereby certify that the project report titled \emph{``\projecttitleplain''}, submitted by
+\studentname{} (\rollno), \department{}, \university{}, in partial fulfilment of the
+requirements for the award of the degree of \degree{} in \branch{}, is a record of the
+project work carried out by the student under my supervision. To the best of my knowledge
+this work has not been submitted, in part or in full, for any degree or diploma at this
+university or elsewhere.
+
+\vspace{2.5cm}
+\noindent Place: Delhi \hfill \supervisor\\
+Date: \fillme{Date} \hfill \supervisordesig\\
+\mbox{} \hfill \department\\
+\mbox{} \hfill \university
+
+% --------------------------------------------------------- acknowledgement
+\chapter*{Acknowledgement}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+I am grateful to my supervisor, \supervisor{}, for guidance and feedback throughout this
+project, and to the faculty of the \department{}, \university{}, for the coursework in
+probability, stochastic processes, optimisation and computing on which this work rests.
+\fillme{Add or edit personal acknowledgements: family, friends, lab staff, etc.}
+
+\vspace{2cm}
+\noindent\hfill \studentname
+
+% --------------------------------------------------------- abstract
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+Internet-facing SSH servers are attacked continuously, yet conventional defences only block
+attackers and learn nothing about what they would have done after logging in. A honeypot
+inverts this: it admits the attacker into a decoy system and records their behaviour.
+Existing SSH honeypots respond to every command with the same fixed emulation. This project
+asks whether a honeypot that \emph{chooses} how to respond to each command can capture more
+attacker behaviour than a static one.
+
+We design and build \textbf{CruxTrap}, a medium-interaction SSH honeypot that emulates an
+Ubuntu server inside a per-session, in-memory filesystem and never executes attacker input.
+Each command is classified into one of ten intent categories. A tabular reinforcement-learning
+agent observes the pair (category, session phase) and selects one of five responses:
+\act{allow}, \act{delay}, \act{fake} (serve decoy credentials), \act{tarpit} or \act{block}.
+Events flow through Redis Streams to a pipeline that enriches them with GeoIP data and stores
+them in PostgreSQL, and a SOC-style dashboard supports investigation and session replay.
+The five services are containerised with defence-in-depth hardening, and the system's
+behaviour under component failure is measured.
+
+The interaction is formalised as a Markov decision process whose reward measures captured
+intelligence. Because the attacker's type is hidden, the honeypot faces a partially
+observable problem. To evaluate policies rigorously we build a generative model of three
+attacker types and compute each policy's expected performance \emph{exactly}, by solving
+the Bellman equations on a 330-state augmented chain. We also compute an oracle upper bound
+by value iteration and the best policy available to the honeypot's own state representation.
+Over 20 independent runs, Q-learning outperforms a static honeypot (expected discounted return
+$5.686 \pm 0.051$ versus $5.542$, $p = 5.8 \times 10^{-6}$) and recovers 60\% of the achievable
+improvement. It does so by learning, without supervision, to serve decoy credentials to attackers
+who are searching for credentials. With the conventional constant learning rate, however, the
+agent performed \emph{worse} than the static baseline. Stochastic-approximation theory explains
+why, and an ablation confirms that a Robbins--Monro step-size schedule fixes it. The benefit
+grows with the share of human attackers ($+0.5\%$ against bot-dominated traffic, $+5.2\%$
+against human-dominated traffic): adaptation pays only where attackers themselves adapt.
+
+\vspace{0.5em}
+\noindent\textbf{Keywords:} honeypot, SSH, deception, reinforcement learning, Q-learning,
+Markov decision process, POMDP, stochastic approximation, event-driven architecture.
