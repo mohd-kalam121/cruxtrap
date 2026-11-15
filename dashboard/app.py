@@ -190,6 +190,19 @@ def create_app(database_url: str | None = None) -> FastAPI:
         return tpl.TemplateResponse(request, "error.html", {"active": "", "status": exc.status_code, "detail": exc.detail},
                                     status_code=exc.status_code)
 
+    async def db_unavailable(request: Request, exc: Exception):
+        log.warning("database unavailable: %s: %s", type(exc).__name__, exc)
+        if request.url.path.startswith("/api/") or request.url.path == "/healthz":
+            return JSONResponse({"error": "database unavailable"}, status_code=503)
+        return tpl.TemplateResponse(request, "error.html", {
+            "active": "", "status": 503,
+            "detail": "The database is unavailable. Attack capture continues; events are queued in Redis "
+                      "and will appear here once PostgreSQL is back."}, status_code=503)
+
+    for exc_type in (OSError, asyncpg.PostgresConnectionError, asyncpg.InterfaceError,
+                     asyncpg.CannotConnectNowError, asyncpg.AdminShutdownError):
+        app.add_exception_handler(exc_type, db_unavailable)
+
     return app
 
 

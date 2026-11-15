@@ -112,6 +112,23 @@ async def test_not_found(client, path):
     assert r.status_code == 404 and "back to overview" in r.text
 
 
+async def test_database_outage_returns_503(client):
+    """Simulate PostgreSQL going away: pages show a 503 explanation, the API returns 503 JSON."""
+    class DeadPool:
+        async def fetchrow(self, *a, **k):
+            raise ConnectionRefusedError("connection refused")
+        fetch = fetchval = fetchrow
+    app = client._transport.app
+    live, app.state.pool = app.state.pool, DeadPool()
+    try:
+        page = await client.get("/sessions")
+        assert page.status_code == 503 and "Attack capture continues" in page.text
+        api = await client.get("/api/stats")
+        assert api.status_code == 503 and api.json() == {"error": "database unavailable"}
+    finally:
+        app.state.pool = live
+
+
 async def test_empty_database_renders(client):
     conn = await asyncpg.connect(TEST_DSN)
     await conn.execute("TRUNCATE session_actions, sessions, login_attempts, attackers")

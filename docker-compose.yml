@@ -1,20 +1,35 @@
-# CruxTrap — data services (Phase 2). Application services are added in Phase 4.
-#   docker compose up -d
-# Ports are bound to localhost only; nothing here is reachable from other machines.
+# CruxTrap: all five services.
+#
+#   docker compose up -d --build
+#   ssh -p 2222 root@127.0.0.1           # the honeypot
+#   http://127.0.0.1:8000                # the dashboard
+#
+# Everything binds to 127.0.0.1 by default. To expose the honeypot (and only the honeypot)
+# on a real deployment:  HONEYPOT_BIND=0.0.0.0 HONEYPOT_PORT=22 docker compose up -d
+#
+# Networks: the honeypot is on `ingest` with Redis only, so even a full escape from the
+# emulator cannot reach PostgreSQL. The pipeline bridges `ingest` and `storage`.
+
+name: cruxtrap
+
+x-python-env: &py-env
+  TZ: UTC
 
 services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
+    networks: [ingest]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -28,12 +43,84 @@ services:
     volumes:
       - pg-data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks: [storage]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cruxtrap} -d ${POSTGRES_DB:-cruxtrap}"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  honeypot:
+    build: { context: ., dockerfile: honeypot/Dockerfile }
+    image: cruxtrap/honeypot:latest
+    environment:
+      <<: *py-env
+      REDIS_URL: redis://redis:6379/0
+      HONEYPOT_HOSTNAME: ${HONEYPOT_HOSTNAME:-ubuntu-srv01}
+      RL_POLICY: ${RL_POLICY:-qlearn}
+      LOGIN_ATTEMPTS_MIN: ${LOGIN_ATTEMPTS_MIN:-1}
+      LOGIN_ATTEMPTS_MAX: ${LOGIN_ATTEMPTS_MAX:-3}
+      HONEYPOT_TIME_SCALE: ${HONEYPOT_TIME_SCALE:-1}
+    ports:
+      - "${HONEYPOT_BIND:-127.0.0.1}:${HONEYPOT_PORT:-2222}:2222"
+    volumes:
+      - honeypot-data:/app/data          # SSH host keys + learned Q-table survive restarts
+    networks: [ingest]
+    depends_on:
+      redis: { condition: service_healthy }
+    # Hardening: this is the only container attackers talk to.
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+
+  pipeline:
+    build: { context: ., dockerfile: pipeline/Dockerfile }
+    image: cruxtrap/pipeline:latest
+    environment:
+      <<: *py-env
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cruxtrap}:${POSTGRES_PASSWORD:-cruxtrap}@postgres:5432/${POSTGRES_DB:-cruxtrap}
+      CONSUMER_NAME: pipeline-1          # stable name: a restart resumes its own pending messages
+    volumes:
+      - ./geoip:/app/geoip:ro            # optional GeoLite2-City.mmdb
+    networks: [ingest, storage]
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  dashboard:
+    build: { context: ., dockerfile: dashboard/Dockerfile }
+    image: cruxtrap/dashboard:latest
+    environment:
+      <<: *py-env
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cruxtrap}:${POSTGRES_PASSWORD:-cruxtrap}@postgres:5432/${POSTGRES_DB:-cruxtrap}
+    ports:
+      # No login yet: keep on localhost. Use an SSH tunnel to view it from elsewhere.
+      - "127.0.0.1:${DASHBOARD_PORT:-8000}:8000"
+    networks: [storage]
+    depends_on:
+      postgres: { condition: service_healthy }
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+networks:
+  ingest:
+  storage:
 
 volumes:
   redis-data:
   pg-data:
+  honeypot-data:

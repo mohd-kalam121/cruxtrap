@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+data
+geoip
+docs
+scripts
+simulator
+**/tests
+*.md
+.env

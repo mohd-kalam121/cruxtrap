@@ -31,7 +31,9 @@ class RLParams:
 
 @dataclass(frozen=True)
 class Settings:
-    host: str = "0.0.0.0"
+    # Localhost by default so a dev run never exposes the honeypot by accident.
+    # The container sets HONEYPOT_HOST=0.0.0.0; exposure is then decided by the port mapping.
+    host: str = "127.0.0.1"
     port: int = 2222
     hostname: str = "ubuntu-srv01"
     host_key_path: str = "data/ssh_host_key"
@@ -58,7 +60,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            host=_env("HONEYPOT_HOST", "0.0.0.0"),
+            host=_env("HONEYPOT_HOST", "127.0.0.1"),
             port=int(_env("HONEYPOT_PORT", "2222")),
             hostname=_env("HONEYPOT_HOSTNAME", "ubuntu-srv01"),
             host_key_path=_env("HONEYPOT_HOST_KEY", "data/ssh_host_key"),

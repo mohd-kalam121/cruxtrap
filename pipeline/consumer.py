@@ -12,7 +12,7 @@ import logging
 
 import asyncpg
 import redis.asyncio as aioredis
-from redis.exceptions import ResponseError
+from redis.exceptions import RedisError, ResponseError
 
 from .config import PipelineSettings
 from .db import Database
@@ -24,7 +24,11 @@ log = logging.getLogger("pipeline")
 class Pipeline:
     def __init__(self, settings: PipelineSettings):
         self.s = settings
-        self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        # The socket timeout must outlast the XREADGROUP BLOCK window, or every idle wait
+        # ends in a client-side TimeoutError.
+        self.redis = aioredis.from_url(settings.redis_url, decode_responses=True,
+                                       socket_timeout=settings.block_ms / 1000 + 10,
+                                       socket_connect_timeout=5, health_check_interval=30)
         self.db = Database(settings.database_url)
         self.geo = GeoIP(settings.geoip_db)
         self.processed = 0
@@ -40,13 +44,22 @@ class Pipeline:
             except (OSError, asyncpg.PostgresError) as e:
                 log.warning("database not ready (%s); retrying in %.0fs", e, self.s.db_retry_seconds)
                 await asyncio.sleep(self.s.db_retry_seconds)
+        while True:
+            try:
+                await self.ensure_group()
+                break
+            except (RedisError, OSError) as e:
+                log.warning("redis not ready (%s); retrying", e)
+                await asyncio.sleep(2.0)
+        log.info("consumer %s ready (group=%s stream=%s)", self.s.consumer, self.s.group, self.s.stream)
+
+    async def ensure_group(self) -> None:
         try:
             await self.redis.xgroup_create(self.s.stream, self.s.group, id="0", mkstream=True)
             log.info("created consumer group %s on %s", self.s.group, self.s.stream)
         except ResponseError as e:
             if "BUSYGROUP" not in str(e):
                 raise
-        log.info("consumer %s ready (group=%s stream=%s)", self.s.consumer, self.s.group, self.s.stream)
 
     async def close(self) -> None:
         await self.db.close()
@@ -102,9 +115,17 @@ class Pipeline:
         try:
             entries = await self.redis.xreadgroup(self.s.group, self.s.consumer, {self.s.stream: start_id},
                                                   count=self.s.batch_size, block=block_ms)
-        except (ConnectionError, OSError, ResponseError) as e:
-            log.warning("redis read failed (%s); retrying", e)
+        except ResponseError as e:
+            if "NOGROUP" in str(e):  # stream/group deleted (e.g. Redis data wiped): recreate
+                log.warning("consumer group missing; recreating")
+                await self.ensure_group()
+            else:
+                log.warning("redis error (%s); retrying", e)
             await asyncio.sleep(1.0)
+            return 0
+        except (RedisError, OSError) as e:  # connection refused/reset, timeouts: Redis restarting
+            log.warning("redis unavailable (%s: %s); retrying", type(e).__name__, e)
+            await asyncio.sleep(2.0)
             return 0
         count = 0
         for _stream, messages in entries or []:
