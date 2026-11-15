@@ -44,7 +44,7 @@ network segmentation and measured failure behaviour.
 | `honeypot/` | AsyncSSH server, fake filesystem, command emulation, RL agent, event emitter |
 | `pipeline/` | Redis Streams consumer → GeoIP enrichment → PostgreSQL |
 | `dashboard/` | FastAPI + Jinja2 SOC dashboard with session replay and Q-table view |
-| `simulator/` | Markov-chain attacker simulator and RL experiments (Phase 5) |
+| `simulator/` | Attacker population model, exact DP solver, experiments, figures (`python -m simulator.experiments`) |
 | `db/` | PostgreSQL schema |
 | `scripts/` | Demo traffic generator |
 | `geoip/` | Optional MaxMind GeoLite2-City database (not committed) |
@@ -57,7 +57,7 @@ network segmentation and measured failure behaviour.
 - [x] Phase 2 — pipeline + PostgreSQL
 - [x] Phase 3 — dashboard
 - [x] Phase 4 — Docker Compose, hardening, failure testing
-- [ ] Phase 5 — attacker simulator + experiments
+- [x] Phase 5 — attacker simulator, exact analysis, experiments ([docs/04-evaluation.md](docs/04-evaluation.md))
 - [ ] Phase 6 — report, slides
 
 ## Configuration
@@ -67,7 +67,8 @@ network segmentation and measured failure behaviour.
 | `HONEYPOT_BIND` / `HONEYPOT_PORT` | `127.0.0.1` / `2222` | Host address/port for the honeypot |
 | `HONEYPOT_HOSTNAME` | `ubuntu-srv01` | Hostname shown to attackers |
 | `RL_POLICY` | `qlearn` | `qlearn`, `sarsa`, `bandit`, `random`, `static` |
-| `RL_ALPHA`, `RL_GAMMA`, `RL_EPSILON0` | `0.1`, `0.9`, `0.3` | Learning hyper-parameters |
+| `RL_ALPHA_SCHEDULE`, `RL_ALPHA_OMEGA`, `RL_ALPHA_MIN` | `visit`, `0.7`, `0` | Step size αₙ = max(α_min, n^−ω) per (state, action); `constant` uses `RL_ALPHA` |
+| `RL_GAMMA`, `RL_EPSILON0` | `0.9`, `0.3` | Discount, initial exploration |
 | `LOGIN_ATTEMPTS_MIN/MAX` | `1` / `3` | The N-th password attempt succeeds, N uniform in range |
 | `HONEYPOT_TIME_SCALE` | `1` | Multiplier for DELAY/TARPIT durations (demos only) |
 | `POSTGRES_PORT` | `55432` | Host port for PostgreSQL (5432/5433 are often taken) |
@@ -89,7 +90,9 @@ REDIS_URL=redis://127.0.0.1:6379/0 python -m honeypot
 uvicorn dashboard.app:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `python -m pytest` (98 tests; pipeline and dashboard tests use a separate
+Experiments: `pip install numpy scipy matplotlib threadpoolctl`, then `python -m simulator.experiments` (about 1 minute; writes `docs/results/` and `docs/figures/`).
+
+Tests: `python -m pytest` (111 tests; pipeline and dashboard tests use a separate
 `cruxtrap_test` database and skip if PostgreSQL/Redis are not running).
 
 ## Safety

@@ -108,6 +108,21 @@ class TabularPolicy(Policy):
     def __init__(self, params: RLParams | None = None, rng: random.Random | None = None):
         super().__init__(params, rng)
         self.q: dict[str, dict[str, float]] = {}
+        self.n: dict[str, dict[str, int]] = {}   # update counts per (state, action)
+
+    def step_size(self, state: str, action: Action) -> float:
+        """alpha for this update. 'constant': fixed alpha (tracks a drifting attacker
+        population, but the estimate keeps noise ~ sigma*sqrt(alpha/(2-alpha)) forever).
+        'visit': alpha_n = max(alpha_min, n^-omega) with n the number of updates of (s,a);
+        for 1/2 < omega <= 1 and alpha_min = 0 this satisfies Robbins-Monro
+        (sum alpha = inf, sum alpha^2 < inf), so the estimate converges; n = 1 gives alpha = 1,
+        which also erases the arbitrary initial value."""
+        counts = self.n.setdefault(state, {})
+        k = counts.get(action.value, 0) + 1
+        counts[action.value] = k
+        if self.params.alpha_schedule == "visit":
+            return max(self.params.alpha_min, k ** -self.params.alpha_omega)
+        return self.params.alpha
 
     def _row(self, state: str) -> dict[str, float]:
         if state not in self.q:
@@ -135,7 +150,7 @@ class TabularPolicy(Policy):
     def save(self, path: str) -> None:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         payload = {"policy": self.name, "episodes": self.episodes, "epsilon": self.epsilon,
-                   "params": asdict(self.params), "q": self.q}
+                   "params": asdict(self.params), "q": self.q, "n": self.n}
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", suffix=".tmp")
         with os.fdopen(fd, "w") as f:
             json.dump(payload, f, indent=1)
@@ -147,6 +162,7 @@ class TabularPolicy(Policy):
         with open(path) as f:
             payload = json.load(f)
         self.q = payload.get("q", {})
+        self.n = payload.get("n", {})
         self.episodes = int(payload.get("episodes", 0))
         self.epsilon = float(payload.get("epsilon", self.params.epsilon0))
         return True
@@ -162,7 +178,7 @@ class BanditPolicy(TabularPolicy):
 
     def update(self, state, action, reward, next_state, next_action=None) -> None:
         row = self._row(self._ONE)
-        row[action.value] += self.params.alpha * (reward - row[action.value])
+        row[action.value] += self.step_size(self._ONE, action) * (reward - row[action.value])
 
     def q_values(self, state: str) -> dict[str, float]:
         return dict(self._row(self._ONE))
@@ -177,7 +193,7 @@ class QLearningPolicy(TabularPolicy):
         target = reward
         if next_state is not None and next_state != TERMINAL:
             target += self.params.gamma * max(self._row(next_state).values())
-        row[action.value] += self.params.alpha * (target - row[action.value])
+        row[action.value] += self.step_size(state, action) * (target - row[action.value])
 
 
 class SarsaPolicy(TabularPolicy):
@@ -190,7 +206,7 @@ class SarsaPolicy(TabularPolicy):
         if next_state is not None and next_state != TERMINAL:
             a2 = next_action or self.greedy(next_state)
             target += self.params.gamma * self._row(next_state)[a2.value]
-        row[action.value] += self.params.alpha * (target - row[action.value])
+        row[action.value] += self.step_size(state, action) * (target - row[action.value])
 
 
 POLICIES: dict[str, type[Policy]] = {

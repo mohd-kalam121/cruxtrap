@@ -120,18 +120,26 @@ $$
 
 with $Q(s_\bot, \cdot) = 0$. Behaviour policy is $\varepsilon$-greedy with
 exponential decay $\varepsilon_k = \max(\varepsilon_{\min}, \varepsilon_0 \rho^k)$ per
-episode $k$; defaults $\alpha = 0.1$, $\varepsilon_0 = 0.3$, $\rho = 0.995$,
-$\varepsilon_{\min} = 0.05$.
+episode $k$; defaults $\varepsilon_0 = 0.3$, $\rho = 0.995$, $\varepsilon_{\min} = 0.05$.
+
+**Step size.** $\alpha$ is per state–action pair: $\alpha_n(s,a) = n(s,a)^{-\omega}$ with
+$\omega = 0.7$, where $n(s,a)$ counts updates of that pair. (The original design used a
+constant $\alpha = 0.1$; the evaluation showed it loses to the static honeypot, see
+`04-evaluation.md` §2.4.)
 
 **Warm start.** $Q(s, \text{ALLOW}) = 0.5$, all else $0$, so the untrained honeypot
 behaves like a conventional one.
 
 **Convergence.** Watkins & Dayan (1992): with finite $\mathcal{S}, \mathcal{A}$,
 bounded rewards, every pair visited infinitely often, and step sizes satisfying
-$\sum \alpha = \infty, \sum \alpha^2 < \infty$, $Q \to Q^*$ w.p. 1. We use constant
-$\alpha$ (standard in non-stationary settings — the attacker population drifts), so
-we expect convergence to a neighbourhood of $Q^*$, which the learning curves in
-Phase 5 will show empirically.
+$\sum \alpha = \infty, \sum \alpha^2 < \infty$, $Q \to Q^*$ w.p. 1. The schedule
+$n^{-\omega}$ satisfies both conditions for $\tfrac12 < \omega \le 1$. Two caveats apply
+here: (i) the honeypot's state hides the attacker type, so the process is a POMDP and the
+fixed point of Q-learning on $(\kappa, \phi)$ need not be the best memoryless policy
+(Singh, Jaakkola & Jordan, 1994); the evaluation measures the gap exactly; (ii) a
+convergent schedule stops adapting, so for long deployments a floor
+$\alpha_n \ge \alpha_{\min}$ (`RL_ALPHA_MIN`) trades a small noise floor for tracking a
+drifting population.
 
 **Persistence.** The Q-table and $\varepsilon$ are checkpointed to JSON after every
 episode so learning survives restarts.

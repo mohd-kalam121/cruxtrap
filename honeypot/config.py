@@ -21,7 +21,13 @@ class RewardWeights:
 @dataclass(frozen=True)
 class RLParams:
     policy: str = "qlearn"          # qlearn | sarsa | bandit | random | static
-    alpha: float = 0.1              # learning rate
+    alpha: float = 0.1              # learning rate (alpha_schedule="constant")
+    # visit: alpha_n = max(alpha_min, n^-omega) per (state, action). Default since Phase 5: with
+    # constant alpha the greedy policy was noise-driven and lost to the static honeypot
+    # (docs/04-evaluation.md). Set RL_ALPHA_MIN > 0 to keep tracking a drifting population.
+    alpha_schedule: str = "visit"   # visit | constant
+    alpha_omega: float = 0.7
+    alpha_min: float = 0.0
     gamma: float = 0.9              # discount factor
     epsilon0: float = 0.3           # initial exploration rate
     epsilon_min: float = 0.05
@@ -75,6 +81,9 @@ class Settings:
             rl=RLParams(
                 policy=_env("RL_POLICY", "qlearn"),
                 alpha=float(_env("RL_ALPHA", "0.1")),
+                alpha_schedule=_env("RL_ALPHA_SCHEDULE", "visit"),
+                alpha_omega=float(_env("RL_ALPHA_OMEGA", "0.7")),
+                alpha_min=float(_env("RL_ALPHA_MIN", "0.0")),
                 gamma=float(_env("RL_GAMMA", "0.9")),
                 epsilon0=float(_env("RL_EPSILON0", "0.3")),
                 epsilon_min=float(_env("RL_EPSILON_MIN", "0.05")),

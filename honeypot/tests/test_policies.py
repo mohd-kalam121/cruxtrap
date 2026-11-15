@@ -84,3 +84,30 @@ def test_save_and_load_roundtrip(tmp_path):
 def test_make_policy_rejects_unknown():
     with pytest.raises(ValueError):
         make_policy("dqn")
+
+
+def test_visit_step_size_schedule():
+    p = QLearningPolicy(RLParams(alpha_schedule="visit", alpha_omega=0.7))
+    steps = [p.step_size("recon|early", Action.ALLOW) for _ in range(4)]
+    assert steps[0] == 1.0                                   # first update erases the initial value
+    assert all(a > b for a, b in zip(steps, steps[1:]))      # strictly decreasing
+    assert steps[3] == pytest.approx(4 ** -0.7)
+    assert p.step_size("recon|early", Action.FAKE) == 1.0    # counted per (state, action)
+
+
+def test_visit_step_size_floor_and_constant():
+    p = QLearningPolicy(RLParams(alpha_schedule="visit", alpha_omega=1.0, alpha_min=0.05))
+    for _ in range(100):
+        a = p.step_size("s", Action.ALLOW)
+    assert a == pytest.approx(0.05)
+    c = QLearningPolicy(RLParams(alpha_schedule="constant", alpha=0.1))
+    assert {c.step_size("s", Action.ALLOW) for _ in range(5)} == {0.1}
+
+
+def test_counts_survive_checkpoint(tmp_path):
+    p = QLearningPolicy(RLParams())
+    p.update("recon|early", Action.ALLOW, 1.0, TERMINAL)
+    p.save(str(tmp_path / "q.json"))
+    q = QLearningPolicy(RLParams())
+    q.load(str(tmp_path / "q.json"))
+    assert q.n == {"recon|early": {"ALLOW": 1}}
